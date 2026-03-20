@@ -6,7 +6,19 @@ import { db } from '../config/firebase';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme } from '../types';
 import { sanitizeEmail } from './authStore';
 import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
+import {
+  mergeHistory,
+  takeSnapshot,
+  restoreSnapshot,
+  emptyHistoryState,
+  MAX_HISTORY,
+  type HistoryEntry,
+} from '../utils/boardHistory';
 import { showToast } from './toastStore';
+
+export type { HistoryEntry } from '../utils/boardHistory';
+
+export type HistoryOptions = { skipHistory?: boolean };
 
 export interface ExportData {
   version: number;
@@ -19,34 +31,47 @@ export interface ExportData {
 }
 
 interface BoardStore extends AppState {
+  historyPast: HistoryEntry[];
+  historyFuture: HistoryEntry[];
+
+  pushHistory: (label: string) => void;
+  undo: () => void;
+  redo: () => void;
+
   // Board actions
   addBoard: (name: string, silent?: boolean) => void;
   renameBoard: (boardId: string, name: string) => void;
   deleteBoard: (boardId: string) => void;
   setActiveBoard: (boardId: string) => void;
-  reorderBoardsByDrag: (activeId: string, overId: string) => void;
+  reorderBoardsByDrag: (activeId: string, overId: string, options?: HistoryOptions) => void;
 
   // Swimlane actions
   addSwimlane: (boardId: string, title: string) => void;
   renameSwimlane: (swimlaneId: string, title: string) => void;
   deleteSwimlane: (swimlaneId: string) => void;
   moveSwimlaneToBoard: (swimlaneId: string, targetBoardId: string) => void;
-  reorderSwimlanes: (boardId: string, swimlaneIds: string[]) => void;
+  reorderSwimlanes: (boardId: string, swimlaneIds: string[], options?: HistoryOptions) => void;
 
   // Task actions
   addTask: (swimlaneId: string, title: string) => void;
   renameTask: (taskId: string, title: string) => void;
   deleteTask: (taskId: string) => void;
   toggleTaskComplete: (taskId: string) => void;
-  moveTask: (taskId: string, fromSwimlaneId: string, toSwimlaneId: string, newIndex?: number) => void;
-  reorderTasks: (swimlaneId: string, taskIds: string[]) => void;
+  moveTask: (
+    taskId: string,
+    fromSwimlaneId: string,
+    toSwimlaneId: string,
+    newIndex?: number,
+    options?: HistoryOptions
+  ) => void;
+  reorderTasks: (swimlaneId: string, taskIds: string[], options?: HistoryOptions) => void;
 
   // Subtask actions
   addSubtask: (taskId: string, title: string) => void;
   renameSubtask: (taskId: string, subtaskId: string, title: string) => void;
   deleteSubtask: (taskId: string, subtaskId: string) => void;
   toggleSubtaskComplete: (taskId: string, subtaskId: string) => void;
-  reorderSubtasks: (taskId: string, subtaskIds: string[]) => void;
+  reorderSubtasks: (taskId: string, subtaskIds: string[], options?: HistoryOptions) => void;
 
   // Settings
   setFontSize: (size: FontSize) => void;
@@ -172,9 +197,51 @@ export const useBoardStore = create<BoardStore>()(
       fontSize: 'md' as FontSize,
       theme: 'lavender' as Theme,
       _isRemoteUpdate: false,
+      historyPast: [] as HistoryEntry[],
+      historyFuture: [] as HistoryEntry[],
 
       _setIsRemoteUpdate: (value: boolean) => {
         set({ _isRemoteUpdate: value });
+      },
+
+      pushHistory: (label: string) => {
+        set((state) => ({ ...mergeHistory(state, label) }));
+      },
+
+      undo: () => {
+        const state = get();
+        if (state.historyPast.length === 0) {
+          showToast('Undo is not available', 'delete');
+          return;
+        }
+        const past = [...state.historyPast];
+        const last = past.pop()!;
+        const currentSnapshot = takeSnapshot(state);
+        set({
+          ...restoreSnapshot(last.snapshot),
+          historyPast: past,
+          historyFuture: [{ snapshot: currentSnapshot, label: last.label }, ...state.historyFuture],
+        });
+        showToast(`Undid: ${last.label}`, 'edit');
+      },
+
+      redo: () => {
+        const state = get();
+        if (state.historyFuture.length === 0) {
+          showToast('Redo is not available', 'delete');
+          return;
+        }
+        const future = [...state.historyFuture];
+        const next = future.shift()!;
+        const currentSnapshot = takeSnapshot(state);
+        set({
+          ...restoreSnapshot(next.snapshot),
+          historyPast: [...state.historyPast, { snapshot: currentSnapshot, label: next.label }].slice(
+            -MAX_HISTORY
+          ),
+          historyFuture: future,
+        });
+        showToast(`Redid: ${next.label}`, 'edit');
       },
 
       // Board actions
@@ -194,11 +261,14 @@ export const useBoardStore = create<BoardStore>()(
               ? [...state.boardOrderIds, board.id]
               : state.boardOrderIds;
 
+          const h = mergeHistory(state, `Add board "${name}"`);
+
           return {
             boards: { ...state.boards, [board.id]: board },
             swimlanes: newSwimlanes,
             boardOrderIds,
             activeBoardId: state.activeBoardId || board.id,
+            ...h,
           };
         });
         if (!silent) {
@@ -207,12 +277,16 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       renameBoard: (boardId: string, name: string) => {
-        set((state) => ({
-          boards: {
-            ...state.boards,
-            [boardId]: { ...state.boards[boardId], name },
-          },
-        }));
+        set((state) => {
+          const h = mergeHistory(state, `Rename board to "${name}"`);
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...state.boards[boardId], name },
+            },
+            ...h,
+          };
+        });
         showToast(`Board renamed to "${name}"`, 'edit');
       },
 
@@ -246,12 +320,15 @@ export const useBoardStore = create<BoardStore>()(
               ? getFirstBoardId(newBoards, newBoardOrderIds)
               : state.activeBoardId;
 
+          const h = mergeHistory(state, `Delete board "${board.name}"`);
+
           return {
             boards: newBoards,
             swimlanes: newSwimlanes,
             tasks: newTasks,
             boardOrderIds: newBoardOrderIds,
             activeBoardId: newActiveBoardId,
+            ...h,
           };
         });
         if (deletedName) {
@@ -263,7 +340,7 @@ export const useBoardStore = create<BoardStore>()(
         set({ activeBoardId: boardId });
       },
 
-      reorderBoardsByDrag: (activeId: string, overId: string) => {
+      reorderBoardsByDrag: (activeId: string, overId: string, options?: HistoryOptions) => {
         let changed = false;
         set((state) => {
           const ids = getOrderedBoardIds(state.boards, state.boardOrderIds);
@@ -273,7 +350,8 @@ export const useBoardStore = create<BoardStore>()(
             return {};
           }
           changed = true;
-          return { boardOrderIds: reorderIds(ids, oldIndex, newIndex) };
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder boards');
+          return { boardOrderIds: reorderIds(ids, oldIndex, newIndex), ...h };
         });
         if (changed) {
           showToast('Board order updated', 'move');
@@ -288,26 +366,34 @@ export const useBoardStore = create<BoardStore>()(
           taskIds: [],
         };
 
-        set((state) => ({
-          swimlanes: { ...state.swimlanes, [swimlane.id]: swimlane },
-          boards: {
-            ...state.boards,
-            [boardId]: {
-              ...state.boards[boardId],
-              swimlaneIds: [...state.boards[boardId].swimlaneIds, swimlane.id],
+        set((state) => {
+          const h = mergeHistory(state, `Add column "${title}"`);
+          return {
+            swimlanes: { ...state.swimlanes, [swimlane.id]: swimlane },
+            boards: {
+              ...state.boards,
+              [boardId]: {
+                ...state.boards[boardId],
+                swimlaneIds: [...state.boards[boardId].swimlaneIds, swimlane.id],
+              },
             },
-          },
-        }));
+            ...h,
+          };
+        });
         showToast(`Column "${title}" added`, 'add');
       },
 
       renameSwimlane: (swimlaneId: string, title: string) => {
-        set((state) => ({
-          swimlanes: {
-            ...state.swimlanes,
-            [swimlaneId]: { ...state.swimlanes[swimlaneId], title },
-          },
-        }));
+        set((state) => {
+          const h = mergeHistory(state, `Rename column to "${title}"`);
+          return {
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: { ...state.swimlanes[swimlaneId], title },
+            },
+            ...h,
+          };
+        });
         showToast(`Column renamed to "${title}"`, 'edit');
       },
 
@@ -333,7 +419,9 @@ export const useBoardStore = create<BoardStore>()(
             }
           });
 
-          return { swimlanes: newSwimlanes, tasks: newTasks, boards: newBoards };
+          const h = mergeHistory(state, `Delete column "${swimlane.title}"`);
+
+          return { swimlanes: newSwimlanes, tasks: newTasks, boards: newBoards, ...h };
         });
         if (removedTitle) {
           showToast(`Column "${removedTitle}" deleted`, 'delete');
@@ -344,7 +432,9 @@ export const useBoardStore = create<BoardStore>()(
         let title = '';
         set((state) => {
           const sl = state.swimlanes[swimlaneId];
-          if (sl) title = sl.title;
+          if (!sl) return state;
+          title = sl.title;
+          const h = mergeHistory(state, `Move column "${sl.title}" to another board`);
           const newBoards = { ...state.boards };
 
           // Remove from current board
@@ -362,7 +452,7 @@ export const useBoardStore = create<BoardStore>()(
             };
           }
 
-          return { boards: newBoards };
+          return { boards: newBoards, ...h };
         });
         const targetName = get().boards[targetBoardId]?.name ?? 'board';
         if (title) {
@@ -370,13 +460,17 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
-      reorderSwimlanes: (boardId: string, swimlaneIds: string[]) => {
-        set((state) => ({
-          boards: {
-            ...state.boards,
-            [boardId]: { ...state.boards[boardId], swimlaneIds },
-          },
-        }));
+      reorderSwimlanes: (boardId: string, swimlaneIds: string[], options?: HistoryOptions) => {
+        set((state) => {
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder columns');
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...state.boards[boardId], swimlaneIds },
+            },
+            ...h,
+          };
+        });
       },
 
       // Task actions
@@ -388,26 +482,34 @@ export const useBoardStore = create<BoardStore>()(
           subtasks: [],
         };
 
-        set((state) => ({
-          tasks: { ...state.tasks, [task.id]: task },
-          swimlanes: {
-            ...state.swimlanes,
-            [swimlaneId]: {
-              ...state.swimlanes[swimlaneId],
-              taskIds: [...state.swimlanes[swimlaneId].taskIds, task.id],
+        set((state) => {
+          const h = mergeHistory(state, `Add task "${title}"`);
+          return {
+            tasks: { ...state.tasks, [task.id]: task },
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: {
+                ...state.swimlanes[swimlaneId],
+                taskIds: [...state.swimlanes[swimlaneId].taskIds, task.id],
+              },
             },
-          },
-        }));
+            ...h,
+          };
+        });
         showToast(`Task "${title}" added`, 'add');
       },
 
       renameTask: (taskId: string, title: string) => {
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: { ...state.tasks[taskId], title },
-          },
-        }));
+        set((state) => {
+          const h = mergeHistory(state, `Rename task to "${title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: { ...state.tasks[taskId], title },
+            },
+            ...h,
+          };
+        });
         showToast(`Task renamed to "${title}"`, 'edit');
       },
 
@@ -415,7 +517,8 @@ export const useBoardStore = create<BoardStore>()(
         let removedTitle = '';
         set((state) => {
           const t = state.tasks[taskId];
-          if (t) removedTitle = t.title;
+          if (!t) return state;
+          removedTitle = t.title;
           const newTasks = { ...state.tasks };
           delete newTasks[taskId];
 
@@ -426,7 +529,9 @@ export const useBoardStore = create<BoardStore>()(
             }
           });
 
-          return { tasks: newTasks, swimlanes: newSwimlanes };
+          const h = mergeHistory(state, `Delete task "${t.title}"`);
+
+          return { tasks: newTasks, swimlanes: newSwimlanes, ...h };
         });
         if (removedTitle) {
           showToast(`Task "${removedTitle}" deleted`, 'delete');
@@ -441,6 +546,10 @@ export const useBoardStore = create<BoardStore>()(
           if (!t) return state;
           taskTitle = t.title;
           nowComplete = !t.completed;
+          const h = mergeHistory(
+            state,
+            nowComplete ? `Mark task "${t.title}" complete` : `Mark task "${t.title}" incomplete`
+          );
           return {
             tasks: {
               ...state.tasks,
@@ -449,6 +558,7 @@ export const useBoardStore = create<BoardStore>()(
                 completed: !t.completed,
               },
             },
+            ...h,
           };
         });
         if (taskTitle) {
@@ -459,8 +569,15 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
-      moveTask: (taskId: string, fromSwimlaneId: string, toSwimlaneId: string, newIndex?: number) => {
+      moveTask: (
+        taskId: string,
+        fromSwimlaneId: string,
+        toSwimlaneId: string,
+        newIndex?: number,
+        options?: HistoryOptions
+      ) => {
         set((state) => {
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Move task');
           const newSwimlanes = { ...state.swimlanes };
 
           // Remove from source
@@ -485,17 +602,21 @@ export const useBoardStore = create<BoardStore>()(
             };
           }
 
-          return { swimlanes: newSwimlanes };
+          return { swimlanes: newSwimlanes, ...h };
         });
       },
 
-      reorderTasks: (swimlaneId: string, taskIds: string[]) => {
-        set((state) => ({
-          swimlanes: {
-            ...state.swimlanes,
-            [swimlaneId]: { ...state.swimlanes[swimlaneId], taskIds },
-          },
-        }));
+      reorderTasks: (swimlaneId: string, taskIds: string[], options?: HistoryOptions) => {
+        set((state) => {
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder tasks');
+          return {
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: { ...state.swimlanes[swimlaneId], taskIds },
+            },
+            ...h,
+          };
+        });
       },
 
       // Subtask actions
@@ -506,30 +627,40 @@ export const useBoardStore = create<BoardStore>()(
           completed: false,
         };
 
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: {
-              ...state.tasks[taskId],
-              subtasks: [...state.tasks[taskId].subtasks, subtask],
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) return state;
+          const h = mergeHistory(state, `Add subtask "${title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: [...task.subtasks, subtask],
+              },
             },
-          },
-        }));
+            ...h,
+          };
+        });
         showToast(`Subtask "${title}" added`, 'add');
       },
 
       renameSubtask: (taskId: string, subtaskId: string, title: string) => {
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: {
-              ...state.tasks[taskId],
-              subtasks: state.tasks[taskId].subtasks.map((st) =>
-                st.id === subtaskId ? { ...st, title } : st
-              ),
+        set((state) => {
+          const h = mergeHistory(state, `Rename subtask to "${title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...state.tasks[taskId],
+                subtasks: state.tasks[taskId].subtasks.map((st) =>
+                  st.id === subtaskId ? { ...st, title } : st
+                ),
+              },
             },
-          },
-        }));
+            ...h,
+          };
+        });
         showToast(`Subtask renamed to "${title}"`, 'edit');
       },
 
@@ -541,6 +672,7 @@ export const useBoardStore = create<BoardStore>()(
           const st = task.subtasks.find((s) => s.id === subtaskId);
           if (!st) return state;
           removedTitle = st.title;
+          const h = mergeHistory(state, `Delete subtask "${st.title}"`);
           return {
             tasks: {
               ...state.tasks,
@@ -549,6 +681,7 @@ export const useBoardStore = create<BoardStore>()(
                 subtasks: task.subtasks.filter((s) => s.id !== subtaskId),
               },
             },
+            ...h,
           };
         });
         if (removedTitle) {
@@ -566,6 +699,12 @@ export const useBoardStore = create<BoardStore>()(
           if (!st) return state;
           subTitle = st.title;
           nowComplete = !st.completed;
+          const h = mergeHistory(
+            state,
+            nowComplete
+              ? `Mark subtask "${st.title}" complete`
+              : `Mark subtask "${st.title}" incomplete`
+          );
           return {
             tasks: {
               ...state.tasks,
@@ -576,6 +715,7 @@ export const useBoardStore = create<BoardStore>()(
                 ),
               },
             },
+            ...h,
           };
         });
         if (subTitle) {
@@ -586,7 +726,7 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
-      reorderSubtasks: (taskId: string, subtaskIds: string[]) => {
+      reorderSubtasks: (taskId: string, subtaskIds: string[], options?: HistoryOptions) => {
         set((state) => {
           const task = state.tasks[taskId];
           if (!task) return state;
@@ -596,6 +736,8 @@ export const useBoardStore = create<BoardStore>()(
             .map((id) => subtaskMap.get(id))
             .filter(Boolean) as typeof task.subtasks;
 
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder subtasks');
+
           return {
             tasks: {
               ...state.tasks,
@@ -604,11 +746,12 @@ export const useBoardStore = create<BoardStore>()(
                 subtasks: reorderedSubtasks,
               },
             },
+            ...h,
           };
         });
       },
 
-      // Settings
+      // Settings (not in undo stack; UI uses uiStore for font/theme)
       setFontSize: (size: FontSize) => {
         set({ fontSize: size });
       },
@@ -718,11 +861,14 @@ export const useBoardStore = create<BoardStore>()(
             ? [...state.boardOrderIds, ...importedOrderIds]
             : state.boardOrderIds;
 
+        const h = mergeHistory(state, 'Import data');
+
         set({
           boards: newBoards,
           swimlanes: newSwimlanes,
           tasks: newTasks,
           boardOrderIds: nextBoardOrderIds,
+          ...h,
         });
 
         return {
@@ -906,6 +1052,7 @@ function startFirestoreSync() {
               swimlanes: data.swimlanes || {},
               tasks: data.tasks || {},
               boardOrderIds: remoteOrderIds,
+              ...emptyHistoryState,
             });
             // Update activeBoardId if current one doesn't exist
             const newBoards = data.boards || {};
@@ -953,6 +1100,7 @@ export function initializeForUser(email: string | null) {
       boardOrderIds: [],
       activeBoardId: null,
       _isRemoteUpdate: false,
+      ...emptyHistoryState,
     });
     
     // Start syncing with Firebase

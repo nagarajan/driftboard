@@ -59,6 +59,7 @@ export function Board({ board }: BoardProps) {
     reorderTasks,
     reorderSubtasks,
     addSwimlane,
+    pushHistory,
   } = useBoardStore();
   const { fontSize } = useUIStore();
 
@@ -135,8 +136,14 @@ export function Board({ board }: BoardProps) {
     setActiveType(activeData?.type || null);
     if (activeData?.type === 'task') {
       taskDragStartSwimlaneId.current = activeData.swimlaneId as string;
+      pushHistory('Move or reorder task');
     } else {
       taskDragStartSwimlaneId.current = null;
+      if (activeData?.type === 'swimlane') {
+        pushHistory('Reorder columns');
+      } else if (activeData?.type === 'subtask') {
+        pushHistory('Reorder subtasks');
+      }
     }
   };
 
@@ -175,7 +182,7 @@ export function Board({ board }: BoardProps) {
 
       // Move task to different swimlane during drag for visual feedback
       if (toSwimlaneId && toSwimlaneId !== fromSwimlaneId) {
-        moveTask(taskId, fromSwimlaneId, toSwimlaneId);
+        moveTask(taskId, fromSwimlaneId, toSwimlaneId, undefined, { skipHistory: true });
         // Update the active data to reflect new swimlane
         activeData.swimlaneId = toSwimlaneId;
       }
@@ -217,7 +224,7 @@ export function Board({ board }: BoardProps) {
 
         if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
           const newOrder = arrayMove(board.swimlaneIds, oldIndex, newIndex);
-          reorderSwimlanes(board.id, newOrder);
+          reorderSwimlanes(board.id, newOrder, { skipHistory: true });
           showToast('Columns reordered', 'move');
         }
       }
@@ -259,7 +266,7 @@ export function Board({ board }: BoardProps) {
 
           if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
             const newOrder = arrayMove(swimlane.taskIds, oldIndex, newIndex);
-            reorderTasks(swimlaneId, newOrder);
+            reorderTasks(swimlaneId, newOrder, { skipHistory: true });
             didReorder = true;
             const crossedLane = Boolean(startSl && startSl !== swimlaneId);
             showToast(crossedLane ? 'Task moved' : 'Task order updated', 'move');
@@ -294,7 +301,7 @@ export function Board({ board }: BoardProps) {
 
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
               const newOrder = arrayMove(subtaskIds, oldIndex, newIndex);
-              reorderSubtasks(taskId, newOrder);
+              reorderSubtasks(taskId, newOrder, { skipHistory: true });
               showToast('Subtasks reordered', 'move');
             }
           }

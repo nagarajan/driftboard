@@ -9,7 +9,8 @@ export interface ToastItem {
   kind: ToastKind;
 }
 
-const MAX_TOASTS = 8;
+/** Cap visible toasts; newest are kept (oldest dropped when over limit). */
+const MAX_TOASTS = 5;
 const AUTO_DISMISS_MS = 3200;
 
 interface ToastStore {

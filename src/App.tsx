@@ -4,6 +4,7 @@ import { useAuthStore, initializeAuthListener } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { useBoardRouting } from './hooks/useBoardRouting';
 import { useCmdScrollFontSize } from './hooks/useCmdScrollFontSize';
+import { useUndoRedoKeyboard } from './hooks/useUndoRedoKeyboard';
 import { Board } from './components/Board';
 import { BoardSwitcher } from './components/BoardSwitcher';
 import { FontSizeSelector } from './components/FontSizeSelector';
@@ -59,6 +60,8 @@ function App() {
 
   // Cmd+scroll (Ctrl+scroll on Windows/Linux) to change font size
   useCmdScrollFontSize();
+
+  useUndoRedoKeyboard();
 
   // Close mobile menu when clicking outside
   useEffect(() => {
