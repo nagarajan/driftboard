@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -593,6 +593,8 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
+      // Per-tab guest data; signed-in users use Firestore (see initializeForUser).
+      storage: createJSONStorage(() => sessionStorage),
     }
   )
 );
@@ -733,8 +735,9 @@ export function initializeForUser(email: string | null) {
     currentUserEmail = email;
     firestoreDoc = doc(db, 'users', sanitized, 'taskboards', 'data');
     
-    // Clear local data
+    // Clear persisted guest data (legacy localStorage + per-tab sessionStorage)
     localStorage.removeItem('kanban-board-storage');
+    sessionStorage.removeItem('kanban-board-storage');
     
     // Reset store to empty state (will be populated from Firebase)
     useBoardStore.setState({

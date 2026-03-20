@@ -1,10 +1,27 @@
-import { useState, useRef, useEffect } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import { getKnownAccounts } from '../store/knownAccounts';
 
 export function GoogleAccountWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { user, loading, signInWithGoogle, signOut } = useAuthStore();
+  const {
+    user,
+    loading,
+    signInWithGoogle,
+    signInWithGoogleSelectAccount,
+    addAnotherGoogleAccount,
+    signInAsKnownAccount,
+    signOut,
+  } = useAuthStore();
+
+  const knownAccounts = useMemo(() => getKnownAccounts(), [isOpen, user]);
+
+  const otherKnownAccounts = useMemo(() => {
+    if (!user?.email) return knownAccounts;
+    const lower = user.email.toLowerCase();
+    return knownAccounts.filter((a) => a.email.toLowerCase() !== lower);
+  }, [knownAccounts, user]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -27,10 +44,19 @@ export function GoogleAccountWidget() {
     await signOut();
   };
 
-  const handleSwitchAccount = async () => {
+  const handleSwitchToAccount = async (email: string) => {
     setIsOpen(false);
-    await signOut();
-    await signInWithGoogle();
+    await signInAsKnownAccount(email);
+  };
+
+  const handleChooseGoogleAccount = async () => {
+    setIsOpen(false);
+    await signInWithGoogleSelectAccount();
+  };
+
+  const handleAddAnotherGoogleAccount = async () => {
+    setIsOpen(false);
+    await addAnotherGoogleAccount();
   };
 
   if (loading) {
@@ -104,13 +130,20 @@ export function GoogleAccountWidget() {
 
       {isOpen && (
         <div
-          className="absolute top-full right-0 mt-2 rounded-lg shadow-lg z-50"
+          className="absolute top-full right-0 mt-2 rounded-lg shadow-lg z-50 max-h-[min(24rem,70vh)] overflow-y-auto"
           style={{
             backgroundColor: 'var(--bg-card)',
             border: '1px solid var(--border-default)',
-            minWidth: '200px',
+            minWidth: '220px',
           }}
         >
+          <p
+            className="text-[0.75em] px-3 pt-2 pb-1"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Each browser tab can be a different user. Closing this tab signs out this tab only.
+          </p>
+
           {user ? (
             <>
               <div
@@ -144,9 +177,65 @@ export function GoogleAccountWidget() {
                 </div>
               </div>
 
+              {otherKnownAccounts.length > 0 && (
+                <div style={{ padding: '0.5em', borderBottom: '1px solid var(--border-default)' }}>
+                  <p
+                    className="text-[0.75em] uppercase px-1 pb-1"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Other accounts on this device
+                  </p>
+                  {otherKnownAccounts.map((acc) => (
+                    <button
+                      key={acc.uid}
+                      type="button"
+                      onClick={() => handleSwitchToAccount(acc.email)}
+                      className="w-full text-left rounded transition-colors hover:bg-[var(--bg-hover)] truncate"
+                      style={{
+                        padding: '0.5em 0.75em',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.9em',
+                      }}
+                    >
+                      {acc.displayName || acc.email}
+                      <span className="block truncate text-[0.85em]" style={{ color: 'var(--text-muted)' }}>
+                        {acc.email}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div style={{ padding: '0.5em' }}>
                 <button
-                  onClick={handleSwitchAccount}
+                  type="button"
+                  onClick={handleAddAnotherGoogleAccount}
+                  className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+                  style={{
+                    padding: '0.5em 0.75em',
+                    color: 'var(--text-secondary)',
+                    gap: '0.5em',
+                  }}
+                >
+                  <svg
+                    style={{ width: '1em', height: '1em' }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v16m8-8H4"
+                    />
+                  </svg>
+                  <span style={{ fontSize: '0.9em' }}>Add another Google account</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleChooseGoogleAccount}
                   className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
                   style={{
                     padding: '0.5em 0.75em',
@@ -167,10 +256,11 @@ export function GoogleAccountWidget() {
                       d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                     />
                   </svg>
-                  <span style={{ fontSize: '0.9em' }}>Switch account</span>
+                  <span style={{ fontSize: '0.9em' }}>Choose Google account</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleSignOut}
                   className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
                   style={{
@@ -198,7 +288,37 @@ export function GoogleAccountWidget() {
             </>
           ) : (
             <div style={{ padding: '0.5em' }}>
+              {knownAccounts.length > 0 && (
+                <div style={{ borderBottom: '1px solid var(--border-default)', paddingBottom: '0.5em', marginBottom: '0.5em' }}>
+                  <p
+                    className="text-[0.75em] uppercase px-1 pb-1"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    Sign in as (this device)
+                  </p>
+                  {knownAccounts.map((acc) => (
+                    <button
+                      key={acc.uid}
+                      type="button"
+                      onClick={() => handleSwitchToAccount(acc.email)}
+                      className="w-full text-left rounded transition-colors hover:bg-[var(--bg-hover)] truncate mb-1"
+                      style={{
+                        padding: '0.5em 0.75em',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.9em',
+                      }}
+                    >
+                      {acc.displayName || acc.email}
+                      <span className="block truncate text-[0.85em]" style={{ color: 'var(--text-muted)' }}>
+                        {acc.email}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <button
+                type="button"
                 onClick={handleSignIn}
                 className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
                 style={{
@@ -207,10 +327,7 @@ export function GoogleAccountWidget() {
                   gap: '0.5em',
                 }}
               >
-                <svg
-                  style={{ width: '1em', height: '1em' }}
-                  viewBox="0 0 24 24"
-                >
+                <svg style={{ width: '1em', height: '1em' }} viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -229,6 +346,32 @@ export function GoogleAccountWidget() {
                   />
                 </svg>
                 <span style={{ fontSize: '0.9em' }}>Sign in with Google</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleChooseGoogleAccount}
+                className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)] mt-1"
+                style={{
+                  padding: '0.5em 0.75em',
+                  color: 'var(--text-secondary)',
+                  gap: '0.5em',
+                }}
+              >
+                <svg
+                  style={{ width: '1em', height: '1em' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                <span style={{ fontSize: '0.9em' }}>New or other Google account</span>
               </button>
             </div>
           )}

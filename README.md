@@ -102,7 +102,13 @@ VITE_FIREBASE_PROJECT_ID=your-project-id
 VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 VITE_FIREBASE_APP_ID=your-app-id
+
+# Optional: enables switching Google accounts without the OAuth popup when possible.
+# Same value as "Web client ID" in Firebase project settings (Your apps -> Web app).
+VITE_GOOGLE_OAUTH_CLIENT_ID=your-web-client-id.apps.googleusercontent.com
 ```
+
+If you set `VITE_GOOGLE_OAUTH_CLIENT_ID`, the app tries a silent Google token first (`prompt=none`), then falls back to the popup. Google often still requires a visible step when switching between two different Google accounts in the same browser; that is a platform limitation, not something a client-only app can fully remove.
 
 Then start the development server:
 ```bash
