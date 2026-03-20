@@ -3,6 +3,7 @@ import { useBoardStore, initializeForUser } from './store/boardStore';
 import { useAuthStore, initializeAuthListener } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { useBoardRouting } from './hooks/useBoardRouting';
+import { useCmdScrollFontSize } from './hooks/useCmdScrollFontSize';
 import { Board } from './components/Board';
 import { BoardSwitcher } from './components/BoardSwitcher';
 import { FontSizeSelector } from './components/FontSizeSelector';
@@ -54,6 +55,9 @@ function App() {
 
   // Sync URL with active board (only after initialization)
   useBoardRouting();
+
+  // Cmd+scroll (Ctrl+scroll on Windows/Linux) to change font size
+  useCmdScrollFontSize();
 
   // Close mobile menu when clicking outside
   useEffect(() => {
