@@ -168,8 +168,7 @@ function BoardListRow({
 
           <button
             onClick={(e) => onEditClick(board.id, board.name, e)}
-            className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-            style={{ color: 'var(--text-muted)' }}
+            className="rounded-md p-1.5 text-[var(--text-muted)] opacity-0 transition-all duration-150 group-hover:opacity-100 hover:opacity-100 hover:scale-105 hover:bg-[var(--bg-active)] hover:text-[var(--accent-primary)] hover:shadow-md hover:ring-2 hover:ring-[var(--accent-primary)]/45"
             title="Rename board"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,8 +177,7 @@ function BoardListRow({
           </button>
           <button
             onClick={(e) => onDeleteClick(board.id, e)}
-            className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-            style={{ color: 'var(--text-muted)' }}
+            className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors transition-opacity group-hover:opacity-100 hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)] hover:opacity-100"
             title="Delete board"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent, CollisionDetection } from '@dnd-kit/core';
 import {
   DndContext,
@@ -14,10 +14,21 @@ import {
   horizontalListSortingStrategy,
   arrayMove,
 } from '@dnd-kit/sortable';
-import type { Board as BoardType, Task as TaskType, Subtask as SubtaskType } from '../types';
+import type { Board as BoardType, Swimlane as SwimlaneType, Task as TaskType, Subtask as SubtaskType } from '../types';
 import { Swimlane } from './Swimlane';
 import { useBoardStore } from '../store/boardStore';
 import { useUIStore } from '../store/uiStore';
+import { showToast } from '../store/toastStore';
+
+function findSwimlaneIdForTask(
+  swimlanes: Record<string, SwimlaneType>,
+  taskId: string
+): string | null {
+  for (const sl of Object.values(swimlanes)) {
+    if (sl.taskIds.includes(taskId)) return sl.id;
+  }
+  return null;
+}
 
 const containerPaddingClasses = {
   xs: 'p-3',       // 12px
@@ -53,6 +64,7 @@ export function Board({ board }: BoardProps) {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<string | null>(null);
+  const taskDragStartSwimlaneId = useRef<string | null>(null);
 
   // Custom collision detection that filters based on what's being dragged
   const customCollisionDetection: CollisionDetection = useCallback((args) => {
@@ -119,7 +131,13 @@ export function Board({ board }: BoardProps) {
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     setActiveId(active.id as string);
-    setActiveType(active.data.current?.type || null);
+    const activeData = active.data.current;
+    setActiveType(activeData?.type || null);
+    if (activeData?.type === 'task') {
+      taskDragStartSwimlaneId.current = activeData.swimlaneId as string;
+    } else {
+      taskDragStartSwimlaneId.current = null;
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -200,6 +218,7 @@ export function Board({ board }: BoardProps) {
         if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
           const newOrder = arrayMove(board.swimlaneIds, oldIndex, newIndex);
           reorderSwimlanes(board.id, newOrder);
+          showToast('Columns reordered', 'move');
         }
       }
       return;
@@ -208,6 +227,7 @@ export function Board({ board }: BoardProps) {
     // Handle task reordering within same swimlane
     if (activeData.type === 'task') {
       const taskId = activeData.task.id;
+      const startSl = taskDragStartSwimlaneId.current;
       let overTaskId: string | null = null;
       let swimlaneId: string | null = null;
 
@@ -230,6 +250,7 @@ export function Board({ board }: BoardProps) {
         }
       }
 
+      let didReorder = false;
       if (overTaskId && swimlaneId && taskId !== overTaskId) {
         const swimlane = swimlanes[swimlaneId];
         if (swimlane) {
@@ -239,9 +260,21 @@ export function Board({ board }: BoardProps) {
           if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
             const newOrder = arrayMove(swimlane.taskIds, oldIndex, newIndex);
             reorderTasks(swimlaneId, newOrder);
+            didReorder = true;
+            const crossedLane = Boolean(startSl && startSl !== swimlaneId);
+            showToast(crossedLane ? 'Task moved' : 'Task order updated', 'move');
           }
         }
       }
+
+      if (!didReorder && startSl) {
+        const endSl = findSwimlaneIdForTask(useBoardStore.getState().swimlanes, taskId);
+        if (endSl && startSl !== endSl) {
+          showToast('Task moved', 'move');
+        }
+      }
+
+      taskDragStartSwimlaneId.current = null;
       return;
     }
 
@@ -262,6 +295,7 @@ export function Board({ board }: BoardProps) {
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
               const newOrder = arrayMove(subtaskIds, oldIndex, newIndex);
               reorderSubtasks(taskId, newOrder);
+              showToast('Subtasks reordered', 'move');
             }
           }
         }

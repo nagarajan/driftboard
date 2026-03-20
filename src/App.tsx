@@ -10,6 +10,7 @@ import { FontSizeSelector } from './components/FontSizeSelector';
 import { ColorThemeSelector } from './components/ColorThemeSelector';
 import { ImportExportButtons } from './components/ImportExportButtons';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
+import { ToastContainer } from './components/ToastContainer';
 
 const scaleClasses = {
   xs: 'scale-xs',
@@ -177,6 +178,7 @@ function App() {
           </div>
         )}
       </main>
+      <ToastContainer />
     </div>
   );
 }

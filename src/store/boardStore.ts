@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme } from '../types';
 import { sanitizeEmail } from './authStore';
 import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
+import { showToast } from './toastStore';
 
 export interface ExportData {
   version: number;
@@ -19,7 +20,7 @@ export interface ExportData {
 
 interface BoardStore extends AppState {
   // Board actions
-  addBoard: (name: string) => void;
+  addBoard: (name: string, silent?: boolean) => void;
   renameBoard: (boardId: string, name: string) => void;
   deleteBoard: (boardId: string) => void;
   setActiveBoard: (boardId: string) => void;
@@ -79,6 +80,36 @@ const extendBlockPeriod = (ms: number) => {
   }
 };
 
+const firestorePayload = (state: AppState) => ({
+  boards: state.boards,
+  swimlanes: state.swimlanes,
+  tasks: state.tasks,
+  boardOrderIds: state.boardOrderIds,
+  updatedAt: Date.now(),
+});
+
+/** Writes board data immediately (no debounce). Use when boardOrderIds changes so refresh does not lose order. */
+const saveToFirestoreImmediate = (state: AppState) => {
+  if (!firestoreDoc) {
+    return;
+  }
+  extendBlockPeriod(3000);
+  if (pendingSaveTimeout) {
+    clearTimeout(pendingSaveTimeout);
+    pendingSaveTimeout = null;
+  }
+  const docRef = firestoreDoc;
+  console.log('Saving to Firestore (immediate)');
+  setDoc(docRef, firestorePayload(state))
+    .then(() => {
+      console.log('Successfully saved to Firestore (immediate)');
+      extendBlockPeriod(2000);
+    })
+    .catch((error) => {
+      console.error('Failed to save to Firestore (immediate):', error);
+    });
+};
+
 // Save to Firestore (debounced to avoid too many writes)
 const saveToFirestore = (state: AppState) => {
   // Only save if we have a Firestore document (signed in)
@@ -98,14 +129,7 @@ const saveToFirestore = (state: AppState) => {
   const docRef = firestoreDoc;
   pendingSaveTimeout = setTimeout(() => {
     console.log('Saving to Firestore...');
-    // Only save task data to Firestore, not UI settings
-    setDoc(docRef, {
-      boards: state.boards,
-      swimlanes: state.swimlanes,
-      tasks: state.tasks,
-      boardOrderIds: state.boardOrderIds,
-      updatedAt: Date.now(),
-    })
+    setDoc(docRef, firestorePayload(state))
       .then(() => {
         console.log('Successfully saved to Firestore');
         // Extend block a bit more after save completes
@@ -154,7 +178,7 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       // Board actions
-      addBoard: (name: string) => {
+      addBoard: (name: string, silent?: boolean) => {
         const { board, swimlanes } = createDefaultBoard();
         board.name = name;
         board.createdAt = Date.now();
@@ -177,6 +201,9 @@ export const useBoardStore = create<BoardStore>()(
             activeBoardId: state.activeBoardId || board.id,
           };
         });
+        if (!silent) {
+          showToast(`Board "${name}" added`, 'add');
+        }
       },
 
       renameBoard: (boardId: string, name: string) => {
@@ -186,12 +213,15 @@ export const useBoardStore = create<BoardStore>()(
             [boardId]: { ...state.boards[boardId], name },
           },
         }));
+        showToast(`Board renamed to "${name}"`, 'edit');
       },
 
       deleteBoard: (boardId: string) => {
+        let deletedName = '';
         set((state) => {
           const board = state.boards[boardId];
           if (!board) return state;
+          deletedName = board.name;
 
           const newBoards = { ...state.boards };
           delete newBoards[boardId];
@@ -224,6 +254,9 @@ export const useBoardStore = create<BoardStore>()(
             activeBoardId: newActiveBoardId,
           };
         });
+        if (deletedName) {
+          showToast(`Board "${deletedName}" deleted`, 'delete');
+        }
       },
 
       setActiveBoard: (boardId: string) => {
@@ -231,6 +264,7 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       reorderBoardsByDrag: (activeId: string, overId: string) => {
+        let changed = false;
         set((state) => {
           const ids = getOrderedBoardIds(state.boards, state.boardOrderIds);
           const oldIndex = ids.indexOf(activeId);
@@ -238,8 +272,12 @@ export const useBoardStore = create<BoardStore>()(
           if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
             return {};
           }
+          changed = true;
           return { boardOrderIds: reorderIds(ids, oldIndex, newIndex) };
         });
+        if (changed) {
+          showToast('Board order updated', 'move');
+        }
       },
 
       // Swimlane actions
@@ -260,6 +298,7 @@ export const useBoardStore = create<BoardStore>()(
             },
           },
         }));
+        showToast(`Column "${title}" added`, 'add');
       },
 
       renameSwimlane: (swimlaneId: string, title: string) => {
@@ -269,12 +308,15 @@ export const useBoardStore = create<BoardStore>()(
             [swimlaneId]: { ...state.swimlanes[swimlaneId], title },
           },
         }));
+        showToast(`Column renamed to "${title}"`, 'edit');
       },
 
       deleteSwimlane: (swimlaneId: string) => {
+        let removedTitle = '';
         set((state) => {
           const swimlane = state.swimlanes[swimlaneId];
           if (!swimlane) return state;
+          removedTitle = swimlane.title;
 
           const newSwimlanes = { ...state.swimlanes };
           delete newSwimlanes[swimlaneId];
@@ -293,10 +335,16 @@ export const useBoardStore = create<BoardStore>()(
 
           return { swimlanes: newSwimlanes, tasks: newTasks, boards: newBoards };
         });
+        if (removedTitle) {
+          showToast(`Column "${removedTitle}" deleted`, 'delete');
+        }
       },
 
       moveSwimlaneToBoard: (swimlaneId: string, targetBoardId: string) => {
+        let title = '';
         set((state) => {
+          const sl = state.swimlanes[swimlaneId];
+          if (sl) title = sl.title;
           const newBoards = { ...state.boards };
 
           // Remove from current board
@@ -316,6 +364,10 @@ export const useBoardStore = create<BoardStore>()(
 
           return { boards: newBoards };
         });
+        const targetName = get().boards[targetBoardId]?.name ?? 'board';
+        if (title) {
+          showToast(`Column "${title}" moved to "${targetName}"`, 'move');
+        }
       },
 
       reorderSwimlanes: (boardId: string, swimlaneIds: string[]) => {
@@ -346,6 +398,7 @@ export const useBoardStore = create<BoardStore>()(
             },
           },
         }));
+        showToast(`Task "${title}" added`, 'add');
       },
 
       renameTask: (taskId: string, title: string) => {
@@ -355,10 +408,14 @@ export const useBoardStore = create<BoardStore>()(
             [taskId]: { ...state.tasks[taskId], title },
           },
         }));
+        showToast(`Task renamed to "${title}"`, 'edit');
       },
 
       deleteTask: (taskId: string) => {
+        let removedTitle = '';
         set((state) => {
+          const t = state.tasks[taskId];
+          if (t) removedTitle = t.title;
           const newTasks = { ...state.tasks };
           delete newTasks[taskId];
 
@@ -371,18 +428,35 @@ export const useBoardStore = create<BoardStore>()(
 
           return { tasks: newTasks, swimlanes: newSwimlanes };
         });
+        if (removedTitle) {
+          showToast(`Task "${removedTitle}" deleted`, 'delete');
+        }
       },
 
       toggleTaskComplete: (taskId: string) => {
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: {
-              ...state.tasks[taskId],
-              completed: !state.tasks[taskId].completed,
+        let nowComplete = false;
+        let taskTitle = '';
+        set((state) => {
+          const t = state.tasks[taskId];
+          if (!t) return state;
+          taskTitle = t.title;
+          nowComplete = !t.completed;
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...t,
+                completed: !t.completed,
+              },
             },
-          },
-        }));
+          };
+        });
+        if (taskTitle) {
+          showToast(
+            nowComplete ? `Task "${taskTitle}" marked complete` : `Task "${taskTitle}" marked incomplete`,
+            'edit'
+          );
+        }
       },
 
       moveTask: (taskId: string, fromSwimlaneId: string, toSwimlaneId: string, newIndex?: number) => {
@@ -441,6 +515,7 @@ export const useBoardStore = create<BoardStore>()(
             },
           },
         }));
+        showToast(`Subtask "${title}" added`, 'add');
       },
 
       renameSubtask: (taskId: string, subtaskId: string, title: string) => {
@@ -455,32 +530,60 @@ export const useBoardStore = create<BoardStore>()(
             },
           },
         }));
+        showToast(`Subtask renamed to "${title}"`, 'edit');
       },
 
       deleteSubtask: (taskId: string, subtaskId: string) => {
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: {
-              ...state.tasks[taskId],
-              subtasks: state.tasks[taskId].subtasks.filter((st) => st.id !== subtaskId),
+        let removedTitle = '';
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) return state;
+          const st = task.subtasks.find((s) => s.id === subtaskId);
+          if (!st) return state;
+          removedTitle = st.title;
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: task.subtasks.filter((s) => s.id !== subtaskId),
+              },
             },
-          },
-        }));
+          };
+        });
+        if (removedTitle) {
+          showToast(`Subtask "${removedTitle}" deleted`, 'delete');
+        }
       },
 
       toggleSubtaskComplete: (taskId: string, subtaskId: string) => {
-        set((state) => ({
-          tasks: {
-            ...state.tasks,
-            [taskId]: {
-              ...state.tasks[taskId],
-              subtasks: state.tasks[taskId].subtasks.map((st) =>
-                st.id === subtaskId ? { ...st, completed: !st.completed } : st
-              ),
+        let subTitle = '';
+        let nowComplete = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) return state;
+          const st = task.subtasks.find((s) => s.id === subtaskId);
+          if (!st) return state;
+          subTitle = st.title;
+          nowComplete = !st.completed;
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: task.subtasks.map((s) =>
+                  s.id === subtaskId ? { ...s, completed: !s.completed } : s
+                ),
+              },
             },
-          },
-        }));
+          };
+        });
+        if (subTitle) {
+          showToast(
+            nowComplete ? `Subtask "${subTitle}" marked complete` : `Subtask "${subTitle}" marked incomplete`,
+            'edit'
+          );
+        }
       },
 
       reorderSubtasks: (taskId: string, subtaskIds: string[]) => {
@@ -631,6 +734,16 @@ export const useBoardStore = create<BoardStore>()(
     {
       name: 'kanban-board-storage',
       version: 2,
+      /** Persist data fields only; boardOrderIds must be included so board order survives refresh. */
+      partialize: (state) => ({
+        boards: state.boards,
+        swimlanes: state.swimlanes,
+        tasks: state.tasks,
+        boardOrderIds: state.boardOrderIds,
+        activeBoardId: state.activeBoardId,
+        fontSize: state.fontSize,
+        theme: state.theme,
+      }),
       migrate: (persistedState: unknown, version: number) => {
         if (version < 2) {
           const s = persistedState as Record<string, unknown>;
@@ -651,6 +764,18 @@ export const useBoardStore = create<BoardStore>()(
           };
         }
         return persistedState;
+      },
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) {
+          console.error('Persist rehydrate error:', error);
+          return;
+        }
+        queueMicrotask(() => {
+          const st = useBoardStore.getState();
+          if (Object.keys(st.boards).length === 0) {
+            st.addBoard('My Board', true);
+          }
+        });
       },
       // Per-tab guest data; signed-in users use Firestore (see initializeForUser).
       storage: createJSONStorage(() => sessionStorage),
@@ -717,10 +842,14 @@ function startFirestoreSync() {
         currentTaskData.swimlanes !== prevTaskData.swimlanes ||
         currentTaskData.tasks !== prevTaskData.tasks ||
         currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds;
+
+      const boardOrderChanged =
+        prevTaskData !== null &&
+        currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds;
       
       if (taskDataChanged) {
         prevTaskData = currentTaskData;
-        saveToFirestore({
+        const payload: AppState = {
           boards: state.boards,
           swimlanes: state.swimlanes,
           tasks: state.tasks,
@@ -728,7 +857,12 @@ function startFirestoreSync() {
           activeBoardId: state.activeBoardId,
           fontSize: state.fontSize,
           theme: state.theme,
-        });
+        };
+        if (boardOrderChanged) {
+          saveToFirestoreImmediate(payload);
+        } else {
+          saveToFirestore(payload);
+        }
       }
     });
     console.log('Subscribed to local state changes');
@@ -833,20 +967,11 @@ export function initializeForUser(email: string | null) {
     setTimeout(() => {
       const state = useBoardStore.getState();
       if (Object.keys(state.boards).length === 0) {
-        state.addBoard('My Board');
+        state.addBoard('My Board', true);
       }
     }, 100);
   }
 }
 
-// Initialize with a default board if empty (guest mode on first load)
-const initializeStore = () => {
-  const state = useBoardStore.getState();
-  if (Object.keys(state.boards).length === 0) {
-    state.addBoard('My Board');
-  }
-};
-
-// Only initialize default board, don't start Firebase sync
-// Firebase sync will be started when user signs in
-initializeStore();
+// Default board is created in persist onRehydrateStorage after sessionStorage loads,
+// so we do not add a board before rehydration (which would race and lose boardOrderIds).

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useBoardStore } from '../store/boardStore';
 import type { ExportData } from '../store/boardStore';
+import { showToast } from '../store/toastStore';
 
 export function ImportExportButtons() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,6 +26,7 @@ export function ImportExportButtons() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    showToast('Data exported', 'edit');
   };
 
   const handleImportClick = () => {
@@ -52,11 +54,13 @@ export function ImportExportButtons() {
           message += ` Renamed: ${result.renamedBoards.join(', ')}`;
         }
 
+        showToast(`Imported ${result.importedBoards} board(s)`, 'add');
         setImportStatus({ type: 'success', message });
         setTimeout(() => setImportStatus(null), 5000);
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error';
+        showToast(`Import failed: ${errorMessage}`, 'delete');
         setImportStatus({
           type: 'error',
           message: `Import failed: ${errorMessage}`,
@@ -66,6 +70,7 @@ export function ImportExportButtons() {
     };
 
     reader.onerror = () => {
+      showToast('Failed to read file', 'delete');
       setImportStatus({ type: 'error', message: 'Failed to read file' });
       setTimeout(() => setImportStatus(null), 5000);
     };

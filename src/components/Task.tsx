@@ -138,8 +138,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
 
           <button
             onClick={handleDelete}
-            className="transition-colors flex-shrink-0"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+            className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
             title="Delete task"
           >
             <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
