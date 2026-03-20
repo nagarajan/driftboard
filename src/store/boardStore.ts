@@ -404,6 +404,8 @@ export const useBoardStore = create<BoardStore>()(
           if (!swimlane) return state;
           removedTitle = swimlane.title;
 
+          const h = mergeHistory(state, `Delete column "${swimlane.title}"`);
+
           const newSwimlanes = { ...state.swimlanes };
           delete newSwimlanes[swimlaneId];
 
@@ -413,13 +415,15 @@ export const useBoardStore = create<BoardStore>()(
           });
 
           const newBoards = { ...state.boards };
-          Object.values(newBoards).forEach((board) => {
-            if (board.swimlaneIds.includes(swimlaneId)) {
-              board.swimlaneIds = board.swimlaneIds.filter((id) => id !== swimlaneId);
+          for (const bid of Object.keys(newBoards)) {
+            const b = newBoards[bid];
+            if (b.swimlaneIds.includes(swimlaneId)) {
+              newBoards[bid] = {
+                ...b,
+                swimlaneIds: b.swimlaneIds.filter((id) => id !== swimlaneId),
+              };
             }
-          });
-
-          const h = mergeHistory(state, `Delete column "${swimlane.title}"`);
+          }
 
           return { swimlanes: newSwimlanes, tasks: newTasks, boards: newBoards, ...h };
         });
@@ -519,17 +523,21 @@ export const useBoardStore = create<BoardStore>()(
           const t = state.tasks[taskId];
           if (!t) return state;
           removedTitle = t.title;
+
+          const h = mergeHistory(state, `Delete task "${t.title}"`);
+
           const newTasks = { ...state.tasks };
           delete newTasks[taskId];
 
           const newSwimlanes = { ...state.swimlanes };
-          Object.values(newSwimlanes).forEach((swimlane) => {
-            if (swimlane.taskIds.includes(taskId)) {
-              swimlane.taskIds = swimlane.taskIds.filter((id) => id !== taskId);
+          for (const sl of Object.values(state.swimlanes)) {
+            if (sl.taskIds.includes(taskId)) {
+              newSwimlanes[sl.id] = {
+                ...sl,
+                taskIds: sl.taskIds.filter((id) => id !== taskId),
+              };
             }
-          });
-
-          const h = mergeHistory(state, `Delete task "${t.title}"`);
+          }
 
           return { tasks: newTasks, swimlanes: newSwimlanes, ...h };
         });

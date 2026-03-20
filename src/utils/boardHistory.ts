@@ -40,7 +40,11 @@ export function takeSnapshot(state: HistorySnapshotFields): HistorySnapshot {
   };
 }
 
-/** Append one undo step and clear redo stack. Call from set() before applying a mutation. */
+/**
+ * Append one undo step and clear redo stack.
+ * Must run before any code that mutates nested objects reachable from `state`
+ * (e.g. shallow copies of swimlanes/boards still share inner references with `state`).
+ */
 export function mergeHistory(
   state: HistorySnapshotFields & HistoryStateFields,
   label: string
