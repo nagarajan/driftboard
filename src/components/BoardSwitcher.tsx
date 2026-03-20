@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useBoardStore } from '../store/boardStore';
-import { EditableTitle } from './EditableTitle';
 
 export function BoardSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
   const [isAddingBoard, setIsAddingBoard] = useState(false);
   const [newBoardName, setNewBoardName] = useState('');
   const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
+  const [boardToEdit, setBoardToEdit] = useState<string | null>(null);
+  const [editBoardName, setEditBoardName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { boards, activeBoardId, setActiveBoard, addBoard, renameBoard, deleteBoard } =
@@ -21,6 +22,7 @@ export function BoardSwitcher() {
         setIsOpen(false);
         setIsAddingBoard(false);
         setBoardToDelete(null);
+        setBoardToEdit(null);
       }
     };
 
@@ -52,6 +54,27 @@ export function BoardSwitcher() {
   const handleCancelDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setBoardToDelete(null);
+  };
+
+  const handleEditClick = (boardId: string, boardName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBoardToEdit(boardId);
+    setEditBoardName(boardName);
+  };
+
+  const handleConfirmEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (boardToEdit && editBoardName.trim()) {
+      renameBoard(boardToEdit, editBoardName.trim());
+      setBoardToEdit(null);
+      setEditBoardName('');
+    }
+  };
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBoardToEdit(null);
+    setEditBoardName('');
   };
 
   return (
@@ -89,7 +112,7 @@ export function BoardSwitcher() {
                 key={board.id}
                 className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${board.id === activeBoardId ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
                 onClick={() => {
-                  if (boardToDelete !== board.id) {
+                  if (boardToDelete !== board.id && boardToEdit !== board.id) {
                     setActiveBoard(board.id);
                     setIsOpen(false);
                   }
@@ -117,6 +140,43 @@ export function BoardSwitcher() {
                       Cancel
                     </button>
                   </div>
+                ) : boardToEdit === board.id ? (
+                  <div className="flex items-center gap-2 w-full">
+                    <input
+                      type="text"
+                      value={editBoardName}
+                      onChange={(e) => setEditBoardName(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') handleConfirmEdit(e as unknown as React.MouseEvent);
+                        if (e.key === 'Escape') handleCancelEdit(e as unknown as React.MouseEvent);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex-1 border rounded px-2 py-0.5 text-[0.85em] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleConfirmEdit}
+                      className="p-1"
+                      style={{ color: 'var(--accent-primary)' }}
+                      title="Save"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      className="p-1"
+                      style={{ color: 'var(--text-muted)' }}
+                      title="Cancel"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <div
@@ -124,13 +184,20 @@ export function BoardSwitcher() {
                       style={{ backgroundColor: board.id === activeBoardId ? 'var(--accent-primary)' : 'var(--text-muted)' }}
                     />
 
-                    <EditableTitle
-                      value={board.name}
-                      onSave={(name) => renameBoard(board.id, name)}
-                      className="flex-1"
-                      inputClassName="w-full"
-                    />
+                    <span className="flex-1 text-[0.9em]" style={{ color: 'var(--text-primary)' }}>
+                      {board.name}
+                    </span>
 
+                    <button
+                      onClick={(e) => handleEditClick(board.id, board.name, e)}
+                      className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+                      style={{ color: 'var(--text-muted)' }}
+                      title="Rename board"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
                     <button
                       onClick={(e) => handleDeleteClick(board.id, e)}
                       className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
