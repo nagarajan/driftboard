@@ -8,7 +8,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { recordKnownAccount } from './knownAccounts';
+import { recordKnownAccount, removeKnownAccountByUid } from './knownAccounts';
 import { requestGoogleTokensSilent } from '../utils/googleIdentitySilentToken';
 
 const GOOGLE_OAUTH_CLIENT_ID =
@@ -141,7 +141,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signOut: async () => {
     set({ loading: true, error: null });
     try {
+      const previousUser = auth.currentUser;
       await firebaseSignOut(auth);
+      if (previousUser?.uid) {
+        removeKnownAccountByUid(previousUser.uid);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Sign out failed';
       set({ error: message });

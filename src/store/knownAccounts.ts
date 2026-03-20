@@ -66,3 +66,10 @@ export function getKnownAccountByEmail(email: string): KnownAccount | null {
   const lower = email.toLowerCase();
   return readAccounts().find((a) => a.email.toLowerCase() === lower) ?? null;
 }
+
+/** Remove an account from the device list (e.g. after user signs out of this app). */
+export function removeKnownAccountByUid(uid: string): void {
+  if (!uid) return;
+  const list = readAccounts().filter((a) => a.uid !== uid);
+  writeAccounts(list);
+}
