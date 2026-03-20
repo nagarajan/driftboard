@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useBoardStore } from '../store/boardStore';
+import { getFirstBoardId } from '../utils/boardOrder';
 
 // Get base path from Vite config (e.g., '/tasks/' in production, '/' in development)
 const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, ''); // Remove trailing slash
@@ -22,6 +23,7 @@ function getBaseUrl(): string {
 
 export function useBoardRouting() {
   const boards = useBoardStore((state) => state.boards);
+  const boardOrderIds = useBoardStore((state) => state.boardOrderIds);
   const activeBoardId = useBoardStore((state) => state.activeBoardId);
   const setActiveBoard = useBoardStore((state) => state.setActiveBoard);
   
@@ -34,6 +36,9 @@ export function useBoardRouting() {
     
     const boardIds = Object.keys(boards);
     if (boardIds.length === 0) return;
+
+    const firstBoardId = getFirstBoardId(boards, boardOrderIds);
+    if (!firstBoardId) return;
     
     hasInitialized.current = true;
     const urlBoardId = getBoardIdFromUrl();
@@ -48,19 +53,19 @@ export function useBoardRouting() {
       } else {
         // Invalid board ID - go to first board
         skipNextUrlUpdate.current = true;
-        setActiveBoard(boardIds[0]);
-        window.history.replaceState({ boardId: boardIds[0] }, '', getBoardUrl(boardIds[0]));
+        setActiveBoard(firstBoardId);
+        window.history.replaceState({ boardId: firstBoardId }, '', getBoardUrl(firstBoardId));
       }
     } else {
       // Base URL - redirect to active or first board
-      const targetId = activeBoardId && boards[activeBoardId] ? activeBoardId : boardIds[0];
+      const targetId = activeBoardId && boards[activeBoardId] ? activeBoardId : firstBoardId;
       if (activeBoardId !== targetId) {
         skipNextUrlUpdate.current = true;
         setActiveBoard(targetId);
       }
       window.history.replaceState({ boardId: targetId }, '', getBoardUrl(targetId));
     }
-  }, [boards, activeBoardId, setActiveBoard]);
+  }, [boards, boardOrderIds, activeBoardId, setActiveBoard]);
 
   // State -> URL sync (runs when activeBoardId changes)
   useEffect(() => {
@@ -89,17 +94,19 @@ export function useBoardRouting() {
   useEffect(() => {
     const handlePopState = () => {
       const urlBoardId = getBoardIdFromUrl();
-      const currentBoards = useBoardStore.getState().boards;
+      const st = useBoardStore.getState();
+      const currentBoards = st.boards;
       const boardIds = Object.keys(currentBoards);
+      const firstId = getFirstBoardId(currentBoards, st.boardOrderIds);
 
       if (urlBoardId && currentBoards[urlBoardId]) {
         skipNextUrlUpdate.current = true;
         setActiveBoard(urlBoardId);
-      } else if (boardIds.length > 0) {
+      } else if (boardIds.length > 0 && firstId) {
         // Invalid or missing board - go to first board
         skipNextUrlUpdate.current = true;
-        setActiveBoard(boardIds[0]);
-        window.history.replaceState({ boardId: boardIds[0] }, '', getBoardUrl(boardIds[0]));
+        setActiveBoard(firstId);
+        window.history.replaceState({ boardId: firstId }, '', getBoardUrl(firstId));
       }
     };
 

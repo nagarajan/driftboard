@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useBoardStore } from '../store/boardStore';
+import { getOrderedBoardIds } from '../utils/boardOrder';
 
 interface SwimlaneMenuProps {
   swimlaneId: string;
@@ -11,9 +12,12 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { boards, moveSwimlaneToBoard, deleteSwimlane, addSwimlane } = useBoardStore();
+  const { boards, boardOrderIds, moveSwimlaneToBoard, deleteSwimlane, addSwimlane } =
+    useBoardStore();
 
-  const otherBoards = Object.values(boards).filter((b) => b.id !== currentBoardId);
+  const otherBoards = getOrderedBoardIds(boards, boardOrderIds)
+    .map((id) => boards[id])
+    .filter((b): b is NonNullable<typeof b> => b != null && b.id !== currentBoardId);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

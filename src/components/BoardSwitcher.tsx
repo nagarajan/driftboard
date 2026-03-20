@@ -1,5 +1,196 @@
 import { useState, useRef, useEffect } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../store/boardStore';
+import { getOrderedBoardIds } from '../utils/boardOrder';
+import type { Board } from '../types';
+
+type BoardListRowProps = {
+  board: Board;
+  activeBoardId: string | null;
+  boardToDelete: string | null;
+  boardToEdit: string | null;
+  editBoardName: string;
+  setEditBoardName: (v: string) => void;
+  dragDisabled: boolean;
+  onRowClick: () => void;
+  onConfirmDelete: (e: React.MouseEvent) => void;
+  onCancelDelete: (e: React.MouseEvent) => void;
+  onConfirmEdit: (e: React.MouseEvent) => void;
+  onCancelEdit: (e: React.MouseEvent) => void;
+  onEditClick: (boardId: string, boardName: string, e: React.MouseEvent) => void;
+  onDeleteClick: (boardId: string, e: React.MouseEvent) => void;
+};
+
+function BoardListRow({
+  board,
+  activeBoardId,
+  boardToDelete,
+  boardToEdit,
+  editBoardName,
+  setEditBoardName,
+  dragDisabled,
+  onRowClick,
+  onConfirmDelete,
+  onCancelDelete,
+  onConfirmEdit,
+  onCancelEdit,
+  onEditClick,
+  onDeleteClick,
+}: BoardListRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: board.id,
+    disabled: dragDisabled,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.65 : 1,
+    position: 'relative' as const,
+    zIndex: isDragging ? 2 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group flex items-center gap-2 px-3 py-2 transition-colors ${board.id === activeBoardId ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'} ${dragDisabled ? '' : 'cursor-pointer'}`}
+      onClick={() => {
+        if (boardToDelete !== board.id && boardToEdit !== board.id) {
+          onRowClick();
+        }
+      }}
+    >
+      {boardToDelete === board.id ? (
+        <div className="flex items-center gap-2 w-full">
+          <span className="text-[0.85em] flex-1" style={{ color: 'var(--text-secondary)' }}>
+            Delete "{board.name}"?
+          </span>
+          <button
+            onClick={onConfirmDelete}
+            className="px-2 py-0.5 text-[0.8em] rounded"
+            style={{ backgroundColor: 'var(--bg-error, #fee2e2)', color: 'var(--text-error, #991b1b)' }}
+            title="Confirm delete"
+          >
+            Delete
+          </button>
+          <button
+            onClick={onCancelDelete}
+            className="px-2 py-0.5 text-[0.8em] rounded border"
+            style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            title="Cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : boardToEdit === board.id ? (
+        <div className="flex items-center gap-2 w-full">
+          <input
+            type="text"
+            value={editBoardName}
+            onChange={(e) => setEditBoardName(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') onConfirmEdit(e as unknown as React.MouseEvent);
+              if (e.key === 'Escape') onCancelEdit(e as unknown as React.MouseEvent);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 border rounded px-2 py-0.5 text-[0.85em] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+            autoFocus
+          />
+          <button
+            onClick={onConfirmEdit}
+            className="p-1"
+            style={{ color: 'var(--accent-primary)' }}
+            title="Save"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+          <button onClick={onCancelEdit} className="p-1" style={{ color: 'var(--text-muted)' }} title="Cancel">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="shrink-0 p-1 rounded cursor-grab active:cursor-grabbing hover:bg-[var(--bg-hover)]"
+            style={{ color: 'var(--text-muted)', touchAction: 'none' }}
+            title="Drag to reorder"
+            aria-label="Drag to reorder"
+            {...attributes}
+            {...listeners}
+            onPointerDown={(e) => {
+              listeners?.onPointerDown?.(e);
+              e.stopPropagation();
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <circle cx="9" cy="8" r="1.5" />
+              <circle cx="15" cy="8" r="1.5" />
+              <circle cx="9" cy="12" r="1.5" />
+              <circle cx="15" cy="12" r="1.5" />
+              <circle cx="9" cy="16" r="1.5" />
+              <circle cx="15" cy="16" r="1.5" />
+            </svg>
+          </button>
+
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ backgroundColor: board.id === activeBoardId ? 'var(--accent-primary)' : 'var(--text-muted)' }}
+          />
+
+          <span className="flex-1 text-[0.9em]" style={{ color: 'var(--text-primary)' }}>
+            {board.name}
+          </span>
+
+          <button
+            onClick={(e) => onEditClick(board.id, board.name, e)}
+            className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+            style={{ color: 'var(--text-muted)' }}
+            title="Rename board"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => onDeleteClick(board.id, e)}
+            className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+            style={{ color: 'var(--text-muted)' }}
+            title="Delete board"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function BoardSwitcher() {
   const [isOpen, setIsOpen] = useState(false);
@@ -10,11 +201,40 @@ export function BoardSwitcher() {
   const [editBoardName, setEditBoardName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { boards, activeBoardId, setActiveBoard, addBoard, renameBoard, deleteBoard } =
-    useBoardStore();
+  const {
+    boards,
+    boardOrderIds,
+    activeBoardId,
+    setActiveBoard,
+    addBoard,
+    renameBoard,
+    deleteBoard,
+    reorderBoardsByDrag,
+  } = useBoardStore();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
-  const boardList = Object.values(boards);
+  const orderedIds = getOrderedBoardIds(boards, boardOrderIds);
+  const boardList = orderedIds
+    .map((id) => boards[id])
+    .filter((b): b is NonNullable<typeof b> => b != null);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    reorderBoardsByDrag(String(active.id), String(over.id));
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -104,114 +324,38 @@ export function BoardSwitcher() {
             <p className="text-[0.75em] font-semibold uppercase px-2 py-1" style={{ color: 'var(--text-secondary)' }}>
               Your Boards
             </p>
+            <p className="text-[0.65em] px-2 pt-0.5" style={{ color: 'var(--text-muted)' }}>
+              Drag the grip to reorder
+            </p>
           </div>
 
           <div className="max-h-64 overflow-y-auto">
-            {boardList.map((board) => (
-              <div
-                key={board.id}
-                className={`group flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${board.id === activeBoardId ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
-                onClick={() => {
-                  if (boardToDelete !== board.id && boardToEdit !== board.id) {
-                    setActiveBoard(board.id);
-                    setIsOpen(false);
-                  }
-                }}
-              >
-                {boardToDelete === board.id ? (
-                  <div className="flex items-center gap-2 w-full">
-                    <span className="text-[0.85em] flex-1" style={{ color: 'var(--text-secondary)' }}>
-                      Delete "{board.name}"?
-                    </span>
-                    <button
-                      onClick={handleConfirmDelete}
-                      className="px-2 py-0.5 text-[0.8em] rounded"
-                      style={{ backgroundColor: 'var(--bg-error, #fee2e2)', color: 'var(--text-error, #991b1b)' }}
-                      title="Confirm delete"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      onClick={handleCancelDelete}
-                      className="px-2 py-0.5 text-[0.8em] rounded border"
-                      style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
-                      title="Cancel"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : boardToEdit === board.id ? (
-                  <div className="flex items-center gap-2 w-full">
-                    <input
-                      type="text"
-                      value={editBoardName}
-                      onChange={(e) => setEditBoardName(e.target.value)}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') handleConfirmEdit(e as unknown as React.MouseEvent);
-                        if (e.key === 'Escape') handleCancelEdit(e as unknown as React.MouseEvent);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex-1 border rounded px-2 py-0.5 text-[0.85em] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleConfirmEdit}
-                      className="p-1"
-                      style={{ color: 'var(--accent-primary)' }}
-                      title="Save"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={handleCancelEdit}
-                      className="p-1"
-                      style={{ color: 'var(--text-muted)' }}
-                      title="Cancel"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: board.id === activeBoardId ? 'var(--accent-primary)' : 'var(--text-muted)' }}
-                    />
-
-                    <span className="flex-1 text-[0.9em]" style={{ color: 'var(--text-primary)' }}>
-                      {board.name}
-                    </span>
-
-                    <button
-                      onClick={(e) => handleEditClick(board.id, board.name, e)}
-                      className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-                      style={{ color: 'var(--text-muted)' }}
-                      title="Rename board"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteClick(board.id, e)}
-                      className="p-1 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-                      style={{ color: 'var(--text-muted)' }}
-                      title="Delete board"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
+                {boardList.map((board) => (
+                  <BoardListRow
+                    key={board.id}
+                    board={board}
+                    activeBoardId={activeBoardId}
+                    boardToDelete={boardToDelete}
+                    boardToEdit={boardToEdit}
+                    editBoardName={editBoardName}
+                    setEditBoardName={setEditBoardName}
+                    dragDisabled={boardToDelete === board.id || boardToEdit === board.id}
+                    onRowClick={() => {
+                      setActiveBoard(board.id);
+                      setIsOpen(false);
+                    }}
+                    onConfirmDelete={handleConfirmDelete}
+                    onCancelDelete={handleCancelDelete}
+                    onConfirmEdit={handleConfirmEdit}
+                    onCancelEdit={handleCancelEdit}
+                    onEditClick={handleEditClick}
+                    onDeleteClick={handleDeleteClick}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
 
           <div className="p-2" style={{ borderTop: '1px solid var(--border-default)' }}>
@@ -233,10 +377,7 @@ export function BoardSwitcher() {
                   style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
                   autoFocus
                 />
-                <button
-                  onClick={handleAddBoard}
-                  style={{ color: 'var(--accent-primary)' }}
-                >
+                <button onClick={handleAddBoard} style={{ color: 'var(--accent-primary)' }}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>

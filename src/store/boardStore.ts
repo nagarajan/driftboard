@@ -5,6 +5,7 @@ import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firest
 import { db } from '../config/firebase';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme } from '../types';
 import { sanitizeEmail } from './authStore';
+import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
 
 export interface ExportData {
   version: number;
@@ -12,6 +13,8 @@ export interface ExportData {
   boards: Record<string, Board>;
   swimlanes: Record<string, Swimlane>;
   tasks: Record<string, Task>;
+  /** Present in v2+ exports; ordered board ids (empty means sort by createdAt). */
+  boardOrderIds?: string[];
 }
 
 interface BoardStore extends AppState {
@@ -20,6 +23,7 @@ interface BoardStore extends AppState {
   renameBoard: (boardId: string, name: string) => void;
   deleteBoard: (boardId: string) => void;
   setActiveBoard: (boardId: string) => void;
+  reorderBoardsByDrag: (activeId: string, overId: string) => void;
 
   // Swimlane actions
   addSwimlane: (boardId: string, title: string) => void;
@@ -99,6 +103,7 @@ const saveToFirestore = (state: AppState) => {
       boards: state.boards,
       swimlanes: state.swimlanes,
       tasks: state.tasks,
+      boardOrderIds: state.boardOrderIds,
       updatedAt: Date.now(),
     })
       .then(() => {
@@ -122,6 +127,7 @@ const createDefaultBoard = (): { board: Board; swimlanes: Swimlane[] } => {
       id: uuidv4(),
       name: 'My Board',
       swimlaneIds: [todoId, inProgressId, doneId],
+      createdAt: Date.now(),
     },
     swimlanes: [
       { id: todoId, title: 'To Do', taskIds: [] },
@@ -137,6 +143,7 @@ export const useBoardStore = create<BoardStore>()(
       boards: {},
       swimlanes: {},
       tasks: {},
+      boardOrderIds: [] as string[],
       activeBoardId: null,
       fontSize: 'md' as FontSize,
       theme: 'lavender' as Theme,
@@ -150,6 +157,7 @@ export const useBoardStore = create<BoardStore>()(
       addBoard: (name: string) => {
         const { board, swimlanes } = createDefaultBoard();
         board.name = name;
+        board.createdAt = Date.now();
 
         set((state) => {
           const newSwimlanes = { ...state.swimlanes };
@@ -157,9 +165,15 @@ export const useBoardStore = create<BoardStore>()(
             newSwimlanes[sl.id] = sl;
           });
 
+          const boardOrderIds =
+            state.boardOrderIds.length > 0
+              ? [...state.boardOrderIds, board.id]
+              : state.boardOrderIds;
+
           return {
             boards: { ...state.boards, [board.id]: board },
             swimlanes: newSwimlanes,
+            boardOrderIds,
             activeBoardId: state.activeBoardId || board.id,
           };
         });
@@ -195,18 +209,18 @@ export const useBoardStore = create<BoardStore>()(
             }
           });
 
-          const boardIds = Object.keys(newBoards);
+          const newBoardOrderIds = state.boardOrderIds.filter((id) => id !== boardId);
+
           const newActiveBoardId =
             state.activeBoardId === boardId
-              ? boardIds.length > 0
-                ? boardIds[0]
-                : null
+              ? getFirstBoardId(newBoards, newBoardOrderIds)
               : state.activeBoardId;
 
           return {
             boards: newBoards,
             swimlanes: newSwimlanes,
             tasks: newTasks,
+            boardOrderIds: newBoardOrderIds,
             activeBoardId: newActiveBoardId,
           };
         });
@@ -214,6 +228,18 @@ export const useBoardStore = create<BoardStore>()(
 
       setActiveBoard: (boardId: string) => {
         set({ activeBoardId: boardId });
+      },
+
+      reorderBoardsByDrag: (activeId: string, overId: string) => {
+        set((state) => {
+          const ids = getOrderedBoardIds(state.boards, state.boardOrderIds);
+          const oldIndex = ids.indexOf(activeId);
+          const newIndex = ids.indexOf(overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+            return {};
+          }
+          return { boardOrderIds: reorderIds(ids, oldIndex, newIndex) };
+        });
       },
 
       // Swimlane actions
@@ -492,11 +518,12 @@ export const useBoardStore = create<BoardStore>()(
       getExportData: (): ExportData => {
         const state = get();
         return {
-          version: 1,
+          version: 2,
           exportedAt: new Date().toISOString(),
           boards: state.boards,
           swimlanes: state.swimlanes,
           tasks: state.tasks,
+          boardOrderIds: state.boardOrderIds,
         };
       },
 
@@ -510,6 +537,8 @@ export const useBoardStore = create<BoardStore>()(
         const newBoards: Record<string, Board> = { ...state.boards };
         const newSwimlanes: Record<string, Swimlane> = { ...state.swimlanes };
         const newTasks: Record<string, Task> = { ...state.tasks };
+        const importedOrderIds: string[] = [];
+        let importCreatedAt = Date.now();
 
         const getUniqueBoardName = (originalName: string): string => {
           const lowerName = originalName.toLowerCase();
@@ -530,6 +559,7 @@ export const useBoardStore = create<BoardStore>()(
 
         Object.values(data.boards).forEach((importedBoard) => {
           const newBoardId = uuidv4();
+          importedOrderIds.push(newBoardId);
 
           const originalName = importedBoard.name;
           const uniqueName = getUniqueBoardName(originalName);
@@ -576,13 +606,20 @@ export const useBoardStore = create<BoardStore>()(
             id: newBoardId,
             name: uniqueName,
             swimlaneIds: newSwimlaneIds,
+            createdAt: importedBoard.createdAt ?? importCreatedAt++,
           };
         });
+
+        const nextBoardOrderIds =
+          state.boardOrderIds.length > 0
+            ? [...state.boardOrderIds, ...importedOrderIds]
+            : state.boardOrderIds;
 
         set({
           boards: newBoards,
           swimlanes: newSwimlanes,
           tasks: newTasks,
+          boardOrderIds: nextBoardOrderIds,
         });
 
         return {
@@ -593,6 +630,28 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
+      version: 2,
+      migrate: (persistedState: unknown, version: number) => {
+        if (version < 2) {
+          const s = persistedState as Record<string, unknown>;
+          let t = Date.now();
+          const boards = { ...(s.boards as Record<string, Board>) };
+          for (const id of Object.keys(boards)) {
+            const b = boards[id];
+            if (b && b.createdAt == null) {
+              boards[id] = { ...b, createdAt: t++ };
+            }
+          }
+          return {
+            ...s,
+            boards,
+            boardOrderIds: Array.isArray(s.boardOrderIds)
+              ? (s.boardOrderIds as string[])
+              : [],
+          };
+        }
+        return persistedState;
+      },
       // Per-tab guest data; signed-in users use Firestore (see initializeForUser).
       storage: createJSONStorage(() => sessionStorage),
     }
@@ -604,7 +663,12 @@ let unsubscribeFromStore: (() => void) | null = null;
 let unsubscribeFromFirestore: (() => void) | null = null;
 
 // Track previous state to detect task data changes
-let prevTaskData: { boards: string; swimlanes: string; tasks: string } | null = null;
+let prevTaskData: {
+  boards: string;
+  swimlanes: string;
+  tasks: string;
+  boardOrderIds: string;
+} | null = null;
 
 function stopFirestoreSync() {
   console.log('Stopping Firestore sync...');
@@ -645,12 +709,14 @@ function startFirestoreSync() {
         boards: JSON.stringify(state.boards),
         swimlanes: JSON.stringify(state.swimlanes),
         tasks: JSON.stringify(state.tasks),
+        boardOrderIds: JSON.stringify(state.boardOrderIds),
       };
       
       const taskDataChanged = !prevTaskData ||
         currentTaskData.boards !== prevTaskData.boards ||
         currentTaskData.swimlanes !== prevTaskData.swimlanes ||
-        currentTaskData.tasks !== prevTaskData.tasks;
+        currentTaskData.tasks !== prevTaskData.tasks ||
+        currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds;
       
       if (taskDataChanged) {
         prevTaskData = currentTaskData;
@@ -658,6 +724,7 @@ function startFirestoreSync() {
           boards: state.boards,
           swimlanes: state.swimlanes,
           tasks: state.tasks,
+          boardOrderIds: state.boardOrderIds,
           activeBoardId: state.activeBoardId,
           fontSize: state.fontSize,
           theme: state.theme,
@@ -687,10 +754,14 @@ function startFirestoreSync() {
           const currentState = useBoardStore.getState();
 
           // Only update if task data is different (not UI settings)
+          const remoteOrderIds = Array.isArray(data.boardOrderIds)
+            ? data.boardOrderIds
+            : [];
           const hasChanges =
             JSON.stringify(data.boards) !== JSON.stringify(currentState.boards) ||
             JSON.stringify(data.swimlanes) !== JSON.stringify(currentState.swimlanes) ||
-            JSON.stringify(data.tasks) !== JSON.stringify(currentState.tasks);
+            JSON.stringify(data.tasks) !== JSON.stringify(currentState.tasks) ||
+            JSON.stringify(remoteOrderIds) !== JSON.stringify(currentState.boardOrderIds);
 
           if (hasChanges) {
             console.log('Applying remote Firestore update');
@@ -700,11 +771,12 @@ function startFirestoreSync() {
               boards: data.boards || {},
               swimlanes: data.swimlanes || {},
               tasks: data.tasks || {},
+              boardOrderIds: remoteOrderIds,
             });
             // Update activeBoardId if current one doesn't exist
             const newBoards = data.boards || {};
             if (!newBoards[currentState.activeBoardId || '']) {
-              const firstBoardId = Object.keys(newBoards)[0] || null;
+              const firstBoardId = getFirstBoardId(newBoards, remoteOrderIds);
               useBoardStore.setState({ activeBoardId: firstBoardId });
             }
             // Reset flag after a short delay
@@ -744,6 +816,7 @@ export function initializeForUser(email: string | null) {
       boards: {},
       swimlanes: {},
       tasks: {},
+      boardOrderIds: [],
       activeBoardId: null,
       _isRemoteUpdate: false,
     });
