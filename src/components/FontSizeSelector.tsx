@@ -22,11 +22,11 @@ export function FontSizeSelector() {
   const { fontSize, setFontSize } = useUIStore();
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 border rounded-lg px-2 py-0.5" style={{ borderColor: 'var(--border-default)' }}>
       <span className="mr-1" style={{ color: 'var(--text-header)' }} title="Font size">
         <TextSizeIcon />
       </span>
-      <div className="flex border rounded-lg overflow-hidden" style={{ borderColor: 'var(--border-default)' }}>
+      <div className="flex border rounded overflow-hidden" style={{ borderColor: 'var(--border-default)' }}>
         {fontSizes.map((size) => (
           <button
             key={size.value}
