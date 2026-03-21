@@ -2,7 +2,7 @@ import type { Board, Swimlane, Task } from '../types';
 
 export const MAX_HISTORY = 10;
 
-/** Board data only; font/theme live in uiStore and are not part of undo. */
+/** Board data only (includes per-board theme on each Board). Font size is global, not in snapshot. */
 export type HistorySnapshot = {
   boards: Record<string, Board>;
   swimlanes: Record<string, Swimlane>;

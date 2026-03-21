@@ -17,20 +17,12 @@ export interface Swimlane {
   taskIds: string[];
 }
 
-export interface Board {
-  id: string;
-  name: string;
-  swimlaneIds: string[];
-  /** UTC ms when the board was created (default list order is oldest first). */
-  createdAt?: number;
-}
-
 export type FontSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 // Pastel themes: rose, lavender, mint, peach
 // Saturated themes: ocean, forest, sunset, grape
 // Plus dark theme
-export type Theme = 
+export type Theme =
   | 'dark'
   | 'rose'
   | 'lavender'
@@ -41,6 +33,19 @@ export type Theme =
   | 'sunset'
   | 'grape';
 
+/** Default / fallback theme (new boards, missing theme, UI when no board selected). */
+export const DEFAULT_BOARD_THEME: Theme = 'ocean';
+
+export interface Board {
+  id: string;
+  name: string;
+  swimlaneIds: string[];
+  /** UTC ms when the board was created (default list order is oldest first). */
+  createdAt?: number;
+  /** Color theme for this board (synced with Firestore). */
+  theme?: Theme;
+}
+
 export interface AppState {
   boards: Record<string, Board>;
   swimlanes: Record<string, Swimlane>;
@@ -49,5 +54,4 @@ export interface AppState {
   boardOrderIds: string[];
   activeBoardId: string | null;
   fontSize: FontSize;
-  theme: Theme;
 }

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme } from '../types';
+import { DEFAULT_BOARD_THEME } from '../types';
 import { sanitizeEmail } from './authStore';
 import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
 import {
@@ -21,6 +22,7 @@ export type { HistoryEntry } from '../utils/boardHistory';
 export type HistoryOptions = { skipHistory?: boolean };
 
 export interface ExportData {
+  /** v3+ includes per-board theme on each Board. */
   version: number;
   exportedAt: string;
   boards: Record<string, Board>;
@@ -75,7 +77,7 @@ interface BoardStore extends AppState {
 
   // Settings
   setFontSize: (size: FontSize) => void;
-  setTheme: (theme: Theme) => void;
+  setBoardTheme: (boardId: string, theme: Theme) => void;
 
   // Import/Export
   getExportData: () => ExportData;
@@ -177,6 +179,7 @@ const createDefaultBoard = (): { board: Board; swimlanes: Swimlane[] } => {
       name: 'My Board',
       swimlaneIds: [todoId, inProgressId, doneId],
       createdAt: Date.now(),
+      theme: DEFAULT_BOARD_THEME,
     },
     swimlanes: [
       { id: todoId, title: 'To Do', taskIds: [] },
@@ -195,7 +198,6 @@ export const useBoardStore = create<BoardStore>()(
       boardOrderIds: [] as string[],
       activeBoardId: null,
       fontSize: 'md' as FontSize,
-      theme: 'lavender' as Theme,
       _isRemoteUpdate: false,
       historyPast: [] as HistoryEntry[],
       historyFuture: [] as HistoryEntry[],
@@ -759,20 +761,32 @@ export const useBoardStore = create<BoardStore>()(
         });
       },
 
-      // Settings (not in undo stack; UI uses uiStore for font/theme)
+      // Settings (font size global; theme is per-board in boards[].theme, synced via Firestore)
       setFontSize: (size: FontSize) => {
         set({ fontSize: size });
       },
 
-      setTheme: (theme: Theme) => {
-        set({ theme });
+      setBoardTheme: (boardId: string, theme: Theme) => {
+        set((state) => {
+          const b = state.boards[boardId];
+          if (!b) return state;
+          const h = mergeHistory(state, `Set board theme to ${theme}`);
+          return {
+            boards: {
+              ...state.boards,
+              [boardId]: { ...b, theme },
+            },
+            ...h,
+          };
+        });
+        showToast(`Theme set to ${theme}`, 'edit');
       },
 
       // Import/Export
       getExportData: (): ExportData => {
         const state = get();
         return {
-          version: 2,
+          version: 3,
           exportedAt: new Date().toISOString(),
           boards: state.boards,
           swimlanes: state.swimlanes,
@@ -861,6 +875,7 @@ export const useBoardStore = create<BoardStore>()(
             name: uniqueName,
             swimlaneIds: newSwimlaneIds,
             createdAt: importedBoard.createdAt ?? importCreatedAt++,
+            theme: importedBoard.theme ?? DEFAULT_BOARD_THEME,
           };
         });
 
@@ -887,7 +902,7 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
-      version: 2,
+      version: 3,
       /** Persist data fields only; boardOrderIds must be included so board order survives refresh. */
       partialize: (state) => ({
         boards: state.boards,
@@ -896,11 +911,11 @@ export const useBoardStore = create<BoardStore>()(
         boardOrderIds: state.boardOrderIds,
         activeBoardId: state.activeBoardId,
         fontSize: state.fontSize,
-        theme: state.theme,
       }),
       migrate: (persistedState: unknown, version: number) => {
+        let state = persistedState as Record<string, unknown>;
         if (version < 2) {
-          const s = persistedState as Record<string, unknown>;
+          const s = state;
           let t = Date.now();
           const boards = { ...(s.boards as Record<string, Board>) };
           for (const id of Object.keys(boards)) {
@@ -909,7 +924,7 @@ export const useBoardStore = create<BoardStore>()(
               boards[id] = { ...b, createdAt: t++ };
             }
           }
-          return {
+          state = {
             ...s,
             boards,
             boardOrderIds: Array.isArray(s.boardOrderIds)
@@ -917,7 +932,21 @@ export const useBoardStore = create<BoardStore>()(
               : [],
           };
         }
-        return persistedState;
+        if (version < 3) {
+          const s = state as Record<string, unknown>;
+          const legacyGlobalTheme = (s.theme as Theme) || DEFAULT_BOARD_THEME;
+          const boards = { ...(s.boards as Record<string, Board>) };
+          for (const id of Object.keys(boards)) {
+            const b = boards[id];
+            if (b && b.theme == null) {
+              boards[id] = { ...b, theme: legacyGlobalTheme };
+            }
+          }
+          const rest = { ...s };
+          delete rest.theme;
+          state = { ...rest, boards };
+        }
+        return state;
       },
       onRehydrateStorage: () => (_state, error) => {
         if (error) {
@@ -983,7 +1012,7 @@ function startFirestoreSync() {
         return;
       }
       
-      // Only sync if task data changed (not UI settings like fontSize, theme, activeBoardId)
+      // Only sync if task data changed (not UI settings like fontSize, activeBoardId; board themes are inside boards)
       const currentTaskData = {
         boards: JSON.stringify(state.boards),
         swimlanes: JSON.stringify(state.swimlanes),
@@ -1010,7 +1039,6 @@ function startFirestoreSync() {
           boardOrderIds: state.boardOrderIds,
           activeBoardId: state.activeBoardId,
           fontSize: state.fontSize,
-          theme: state.theme,
         };
         if (boardOrderChanged) {
           saveToFirestoreImmediate(payload);

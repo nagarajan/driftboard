@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useUIStore } from '../store/uiStore';
+import { useBoardStore } from '../store/boardStore';
 import type { Theme } from '../types';
+import { DEFAULT_BOARD_THEME } from '../types';
 
 interface ThemeOption {
   value: Theme;
@@ -27,7 +28,12 @@ const themeOptions: ThemeOption[] = [
 export function ColorThemeSelector() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { theme, setTheme } = useUIStore();
+  const activeBoardId = useBoardStore((s) => s.activeBoardId);
+  const boards = useBoardStore((s) => s.boards);
+  const setBoardTheme = useBoardStore((s) => s.setBoardTheme);
+
+  const activeBoard = activeBoardId ? boards[activeBoardId] : null;
+  const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
 
   const currentTheme = themeOptions.find((t) => t.value === theme) || themeOptions[0];
 
@@ -43,7 +49,9 @@ export function ColorThemeSelector() {
   }, []);
 
   const handleSelectTheme = (themeValue: Theme) => {
-    setTheme(themeValue);
+    if (activeBoardId) {
+      setBoardTheme(activeBoardId, themeValue);
+    }
     setIsOpen(false);
   };
 
@@ -72,14 +80,16 @@ export function ColorThemeSelector() {
   return (
     <div className="relative" ref={menuRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border rounded transition-colors hover:opacity-80"
+        type="button"
+        onClick={() => activeBoardId && setIsOpen(!isOpen)}
+        disabled={!activeBoardId}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border rounded transition-colors hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
         style={{
           backgroundColor: 'var(--bg-card)',
           borderColor: 'var(--border-default)',
           color: 'var(--text-secondary)',
         }}
-        title="Color theme"
+        title={activeBoardId ? 'Color theme for this board' : 'Select a board to set its theme'}
       >
         {renderColorPreview(currentTheme.colors, '1rem')}
         <span>{currentTheme.label}</span>

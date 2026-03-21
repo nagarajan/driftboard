@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useBoardStore, initializeForUser } from './store/boardStore';
 import { useAuthStore, initializeAuthListener } from './store/authStore';
 import { useUIStore } from './store/uiStore';
+import { DEFAULT_BOARD_THEME } from './types';
 import { useBoardRouting } from './hooks/useBoardRouting';
 import { useCmdScrollFontSize } from './hooks/useCmdScrollFontSize';
 import { useUndoRedoKeyboard } from './hooks/useUndoRedoKeyboard';
@@ -36,13 +37,14 @@ const themeClasses: Record<string, string> = {
   dark: 'theme-dark',
 };
 
-const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-lavender';
+const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 
 function App() {
   const { boards, activeBoardId } = useBoardStore();
   const { initialized } = useAuthStore();
-  const { fontSize, theme } = useUIStore();
+  const { fontSize } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
+  const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
