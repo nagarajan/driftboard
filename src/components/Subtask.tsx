@@ -88,7 +88,7 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
         backgroundColor: subtask.completed ? 'var(--bg-subtask-completed)' : 'var(--bg-subtask)',
         borderColor: subtask.completed ? 'var(--border-completed)' : 'var(--border-card)',
       }}
-      className="flex items-center rounded border ml-4"
+      className="flex items-center rounded border ml-4 min-w-0 overflow-hidden"
     >
       <button
         {...attributes}
@@ -115,7 +115,7 @@ function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: stri
         backgroundColor: subtask.completed ? 'var(--bg-subtask-completed)' : 'var(--bg-subtask)',
         borderColor: subtask.completed ? 'var(--border-completed)' : 'var(--border-card)',
       }}
-      className="flex items-center rounded border ml-4"
+      className="flex items-center rounded border ml-4 min-w-0 overflow-hidden"
     >
       <div className="flex-shrink-0" style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', width: '1em', height: '1em' }}>
         <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

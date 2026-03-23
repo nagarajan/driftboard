@@ -77,12 +77,12 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
           backgroundColor: task.completed ? 'var(--bg-card-completed)' : 'var(--bg-card)',
           borderColor: task.completed ? 'var(--border-completed)' : 'var(--border-card)',
         }}
-        className="rounded-lg border shadow-sm"
+        className="rounded-lg border shadow-sm min-w-0 overflow-hidden"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
         <div
-          className="flex items-center"
+          className="flex items-center min-w-0"
           style={{
             padding: 'var(--padding-card-sm, 0.25rem) var(--padding-card, 0.75rem)',
             gap: 'var(--gap-sm, 0.5rem)',
@@ -130,8 +130,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
             style={{
               color: task.completed ? 'var(--text-completed)' : 'var(--text-primary)',
               lineHeight: '1.2',
-              display: 'flex',
-              alignItems: 'center',
             }}
             inputClassName="w-full"
           />

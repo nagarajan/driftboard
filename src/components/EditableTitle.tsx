@@ -94,6 +94,8 @@ export function EditableTitle({
     minWidth: 0,
     boxSizing: 'border-box',
     overflow: 'hidden',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
     resize: 'none',
     ...styleForTextControl(style),
   };
@@ -126,8 +128,14 @@ export function EditableTitle({
         skipBlurSaveRef.current = false;
         setIsEditing(true);
       }}
-      className={`cursor-pointer rounded px-1 hover:bg-[var(--bg-hover)] whitespace-pre-wrap break-words ${className}`}
-      style={{ ...style, minWidth: 0 }}
+      className={`cursor-pointer rounded px-1 hover:bg-[var(--bg-hover)] whitespace-pre-wrap ${className}`}
+      style={{
+        ...style,
+        minWidth: 0,
+        overflowX: 'hidden',
+        overflowWrap: 'anywhere',
+        wordBreak: 'break-word',
+      }}
       title="Click to edit"
     >
       {value || placeholder}
