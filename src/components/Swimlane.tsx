@@ -8,6 +8,7 @@ import { EditableTitle } from './EditableTitle';
 import { Task } from './Task';
 import { SwimlaneMenu } from './SwimlaneMenu';
 import { useBoardStore } from '../store/boardStore';
+import { isTaskSnoozed } from '../utils/taskSnooze';
 
 interface SwimlaneProps {
   swimlane: SwimlaneType;
@@ -20,6 +21,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
   const { renameSwimlane, addTask } = useBoardStore();
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const firstSnoozedTaskIndex = tasks.findIndex((task) => isTaskSnoozed(task));
 
   const {
     attributes,
@@ -103,8 +105,30 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
         style={{ padding: 'var(--padding-section, 0.75rem)', gap: 'var(--gap-md, 0.75rem)', backgroundColor: isOver ? 'var(--bg-active)' : 'transparent' }}
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-          {tasks.map((task) => (
-            <Task key={task.id} task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} />
+          {tasks.map((task, index) => (
+            <div key={task.id} className="contents">
+              {index === firstSnoozedTaskIndex && (
+                <div className="flex items-center" style={{ gap: 'var(--gap-sm, 0.5rem)' }}>
+                  <div
+                    className="h-px flex-1"
+                    style={{ backgroundColor: 'var(--border-default)' }}
+                    aria-hidden="true"
+                  />
+                  <span
+                    className="text-[0.75em] font-medium uppercase tracking-[0.12em]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    snoozed
+                  </span>
+                  <div
+                    className="h-px flex-1"
+                    style={{ backgroundColor: 'var(--border-default)' }}
+                    aria-hidden="true"
+                  />
+                </div>
+              )}
+              <Task task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} />
+            </div>
           ))}
         </SortableContext>
 

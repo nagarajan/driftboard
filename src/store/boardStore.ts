@@ -15,6 +15,7 @@ import {
   sortSwimlanesTaskIdsByPriority,
   sortTaskIdsByPriority,
 } from '../utils/priority';
+import { formatSnoozeUntil, isTaskAwaitingAck } from '../utils/taskSnooze';
 import {
   mergeHistory,
   takeSnapshot,
@@ -30,7 +31,7 @@ export type { HistoryEntry } from '../utils/boardHistory';
 export type HistoryOptions = { skipHistory?: boolean };
 
 export interface ExportData {
-  /** v4+ includes per-board theme and task/subtask priority. */
+  /** v5+ includes per-board theme, task/subtask priority, and task snooze state. */
   version: number;
   exportedAt: string;
   boards: Record<string, Board>;
@@ -70,6 +71,9 @@ interface BoardStore extends AppState {
   deleteTaskNote: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
   toggleTaskComplete: (taskId: string) => void;
+  snoozeTask: (taskId: string, until: number) => void;
+  acknowledgeTask: (taskId: string) => void;
+  activateDueSnoozedTasks: (now?: number) => void;
   moveTask: (
     taskId: string,
     fromSwimlaneId: string,
@@ -132,6 +136,11 @@ const findSwimlaneIdForTask = (
   }
   return null;
 };
+
+const moveTaskIdToFront = (taskIds: string[], taskId: string): string[] => [
+  taskId,
+  ...taskIds.filter((id) => id !== taskId),
+];
 
 const firestorePayload = (state: AppState) => ({
   boards: state.boards,
@@ -704,6 +713,160 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
+      snoozeTask: (taskId: string, until: number) => {
+        if (!Number.isFinite(until) || until <= Date.now()) {
+          return;
+        }
+
+        let taskTitle = '';
+        let saved = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) {
+            return state;
+          }
+
+          taskTitle = task.title;
+          saved = true;
+          const nextTasks = {
+            ...state.tasks,
+            [taskId]: {
+              ...task,
+              snooze: {
+                until,
+                awaitingAck: false,
+              },
+            },
+          };
+          const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
+          const nextSwimlanes =
+            swimlaneId && state.swimlanes[swimlaneId]
+              ? {
+                  ...state.swimlanes,
+                  [swimlaneId]: {
+                    ...state.swimlanes[swimlaneId],
+                    taskIds: sortTaskIdsByPriority(state.swimlanes[swimlaneId].taskIds, nextTasks),
+                  },
+                }
+              : state.swimlanes;
+          const h = mergeHistory(state, `Snooze task "${task.title}"`);
+
+          return {
+            tasks: nextTasks,
+            swimlanes: nextSwimlanes,
+            ...h,
+          };
+        });
+
+        if (saved) {
+          showToast(`Task "${taskTitle}" snoozed until ${formatSnoozeUntil(until)}`, 'edit');
+        }
+      },
+
+      acknowledgeTask: (taskId: string) => {
+        let taskTitle = '';
+        let acknowledged = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task || !task.snooze || !isTaskAwaitingAck(task)) {
+            return state;
+          }
+
+          taskTitle = task.title;
+          acknowledged = true;
+          const nextTasks = {
+            ...state.tasks,
+            [taskId]: {
+              ...task,
+              snooze: undefined,
+            },
+          };
+          const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
+          const nextSwimlanes =
+            swimlaneId && state.swimlanes[swimlaneId]
+              ? {
+                  ...state.swimlanes,
+                  [swimlaneId]: {
+                    ...state.swimlanes[swimlaneId],
+                    taskIds: sortTaskIdsByPriority(
+                      moveTaskIdToFront(state.swimlanes[swimlaneId].taskIds, taskId),
+                      nextTasks
+                    ),
+                  },
+                }
+              : state.swimlanes;
+          const h = mergeHistory(state, `Acknowledge task "${task.title}"`);
+
+          return {
+            tasks: nextTasks,
+            swimlanes: nextSwimlanes,
+            ...h,
+          };
+        });
+
+        if (acknowledged) {
+          showToast(`Task "${taskTitle}" acknowledged`, 'edit');
+        }
+      },
+
+      activateDueSnoozedTasks: (now: number = Date.now()) => {
+        let activatedCount = 0;
+        set((state) => {
+          const dueTaskIds = Object.values(state.tasks)
+            .filter((task) => task.snooze && !task.snooze.awaitingAck && task.snooze.until <= now)
+            .sort((a, b) => a.snooze!.until - b.snooze!.until)
+            .map((task) => task.id);
+
+          if (dueTaskIds.length === 0) {
+            return state;
+          }
+
+          activatedCount = dueTaskIds.length;
+          const dueTaskIdSet = new Set(dueTaskIds);
+          const nextTasks = { ...state.tasks };
+          dueTaskIds.forEach((taskId) => {
+            const task = nextTasks[taskId];
+            if (task?.snooze) {
+              nextTasks[taskId] = {
+                ...task,
+                snooze: {
+                  ...task.snooze,
+                  awaitingAck: true,
+                },
+              };
+            }
+          });
+
+          const nextSwimlanes = { ...state.swimlanes };
+          for (const swimlane of Object.values(state.swimlanes)) {
+            const readyInLane = swimlane.taskIds.filter((taskId) => dueTaskIdSet.has(taskId));
+            if (readyInLane.length === 0) {
+              continue;
+            }
+
+            nextSwimlanes[swimlane.id] = {
+              ...swimlane,
+              taskIds: sortTaskIdsByPriority(
+                [...readyInLane, ...swimlane.taskIds.filter((taskId) => !dueTaskIdSet.has(taskId))],
+                nextTasks
+              ),
+            };
+          }
+
+          return {
+            tasks: nextTasks,
+            swimlanes: nextSwimlanes,
+          };
+        });
+
+        if (activatedCount > 0) {
+          showToast(
+            activatedCount === 1 ? '1 snoozed task is ready' : `${activatedCount} snoozed tasks are ready`,
+            'move'
+          );
+        }
+      },
+
       moveTask: (
         taskId: string,
         fromSwimlaneId: string,
@@ -1022,7 +1185,7 @@ export const useBoardStore = create<BoardStore>()(
       getExportData: (): ExportData => {
         const state = get();
         return {
-          version: 4,
+          version: 5,
           exportedAt: new Date().toISOString(),
           boards: state.boards,
           swimlanes: state.swimlanes,
@@ -1141,7 +1304,7 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
-      version: 4,
+      version: 5,
       /** Persist data fields only; boardOrderIds must be included so board order survives refresh. */
       partialize: (state) => ({
         boards: state.boards,
@@ -1186,6 +1349,15 @@ export const useBoardStore = create<BoardStore>()(
           state = { ...rest, boards };
         }
         if (version < 4) {
+          const s = state as Record<string, unknown>;
+          const tasks = normalizeTasksRecord((s.tasks as Record<string, Task>) || {});
+          const swimlanes = sortSwimlanesTaskIdsByPriority(
+            ((s.swimlanes as Record<string, Swimlane>) || {}),
+            tasks
+          );
+          state = { ...s, tasks, swimlanes };
+        }
+        if (version < 5) {
           const s = state as Record<string, unknown>;
           const tasks = normalizeTasksRecord((s.tasks as Record<string, Task>) || {});
           const swimlanes = sortSwimlanesTaskIdsByPriority(

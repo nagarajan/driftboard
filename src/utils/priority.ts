@@ -1,4 +1,5 @@
 import type { Priority, Task, Subtask, Swimlane } from '../types';
+import { getTaskSortGroup, normalizeTaskSnooze } from './taskSnooze';
 
 export const PRIORITY_OPTIONS: Priority[] = ['high', 'medium', 'low', 'none'];
 
@@ -48,6 +49,7 @@ export function normalizeTask(task: Task): Task {
     ...task,
     priority: normalizePriority(task.priority),
     subtasks: task.subtasks.map(normalizeSubtask),
+    snooze: normalizeTaskSnooze(task.snooze),
   };
 }
 
@@ -61,10 +63,15 @@ export function sortTaskIdsByPriority(
   taskIds: string[],
   tasks: Record<string, Task>
 ): string[] {
+  const now = Date.now();
   return taskIds
     .map((taskId, index) => ({ taskId, index, task: tasks[taskId] }))
     .filter((entry) => Boolean(entry.task))
     .sort((a, b) => {
+      const groupDiff = getTaskSortGroup(a.task!, now) - getTaskSortGroup(b.task!, now);
+      if (groupDiff !== 0) {
+        return groupDiff;
+      }
       const rankDiff =
         PRIORITY_RANK[normalizePriority(a.task?.priority)] -
         PRIORITY_RANK[normalizePriority(b.task?.priority)];

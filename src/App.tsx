@@ -43,7 +43,7 @@ const themeClasses: Record<string, string> = {
 const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 
 function App() {
-  const { boards, activeBoardId } = useBoardStore();
+  const { boards, activeBoardId, activateDueSnoozedTasks } = useBoardStore();
   const { initialized } = useAuthStore();
   const { fontSize, swimlaneWidth } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
@@ -71,6 +71,15 @@ function App() {
   useCmdShiftScrollSwimlaneWidth();
 
   useUndoRedoKeyboard();
+
+  useEffect(() => {
+    activateDueSnoozedTasks();
+    const intervalId = window.setInterval(() => {
+      activateDueSnoozedTasks();
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activateDueSnoozedTasks]);
 
   // Close mobile menu when clicking outside
   useEffect(() => {

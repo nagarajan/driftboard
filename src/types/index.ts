@@ -8,6 +8,11 @@ export interface Subtask {
   note?: string;
 }
 
+export interface TaskSnooze {
+  until: number;
+  awaitingAck: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -15,6 +20,7 @@ export interface Task {
   priority: Priority;
   note?: string;
   subtasks: Subtask[];
+  snooze?: TaskSnooze;
 }
 
 export interface Swimlane {

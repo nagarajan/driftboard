@@ -346,3 +346,23 @@ body {
   -webkit-user-select: none;
   user-select: none;
 }
+
+@keyframes task-ready-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-3px);
+  }
+}
+
+.task-ready-bounce {
+  animation: task-ready-bounce 1.2s ease-in-out infinite;
+}
