@@ -347,22 +347,19 @@ body {
   user-select: none;
 }
 
-@keyframes task-ready-bounce {
+@keyframes task-ready-glow {
   0%,
   100% {
-    transform: translateY(0);
-  }
-  25% {
-    transform: translateY(-6px);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
   }
   50% {
-    transform: translateY(0);
-  }
-  75% {
-    transform: translateY(-3px);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent-primary) 75%, transparent),
+      0 0 12px 2px color-mix(in srgb, var(--accent-primary) 55%, transparent),
+      0 0 22px 4px color-mix(in srgb, var(--accent-primary) 35%, transparent);
   }
 }
 
-.task-ready-bounce {
-  animation: task-ready-bounce 1.2s ease-in-out infinite;
+.task-ready-glow {
+  animation: task-ready-glow 1.8s ease-in-out infinite;
 }

@@ -45,11 +45,12 @@ export function normalizeSubtask(subtask: Subtask): Subtask {
 }
 
 export function normalizeTask(task: Task): Task {
+  const normalizedSnooze = normalizeTaskSnooze(task.snooze);
   return {
     ...task,
     priority: normalizePriority(task.priority),
     subtasks: task.subtasks.map(normalizeSubtask),
-    snooze: normalizeTaskSnooze(task.snooze),
+    ...(normalizedSnooze ? { snooze: normalizedSnooze } : {}),
   };
 }
 

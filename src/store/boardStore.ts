@@ -72,6 +72,7 @@ interface BoardStore extends AppState {
   deleteTask: (taskId: string) => void;
   toggleTaskComplete: (taskId: string) => void;
   snoozeTask: (taskId: string, until: number) => void;
+  cancelTaskSnooze: (taskId: string) => void;
   acknowledgeTask: (taskId: string) => void;
   activateDueSnoozedTasks: (now?: number) => void;
   moveTask: (
@@ -142,13 +143,69 @@ const moveTaskIdToFront = (taskIds: string[], taskId: string): string[] => [
   ...taskIds.filter((id) => id !== taskId),
 ];
 
+const withoutTaskNote = (task: Task): Task => {
+  const nextTask = { ...task };
+  delete nextTask.note;
+  return nextTask;
+};
+
+const withoutTaskSnooze = (task: Task): Task => {
+  const nextTask = { ...task };
+  delete nextTask.snooze;
+  return nextTask;
+};
+
+const withoutSubtaskNote = (subtask: Subtask): Subtask => {
+  const nextSubtask = { ...subtask };
+  delete nextSubtask.note;
+  return nextSubtask;
+};
+
+const stripUndefinedFields = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedFields(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, nestedValue]) => nestedValue !== undefined)
+        .map(([key, nestedValue]) => [key, stripUndefinedFields(nestedValue)])
+    ) as T;
+  }
+
+  return value;
+};
+
 const firestorePayload = (state: AppState) => ({
-  boards: state.boards,
-  swimlanes: state.swimlanes,
-  tasks: state.tasks,
-  boardOrderIds: state.boardOrderIds,
+  boards: stripUndefinedFields(state.boards),
+  swimlanes: stripUndefinedFields(state.swimlanes),
+  tasks: stripUndefinedFields(state.tasks),
+  boardOrderIds: stripUndefinedFields(state.boardOrderIds),
   updatedAt: Date.now(),
 });
+
+const getComparableSyncData = (state: {
+  boards: Record<string, Board>;
+  swimlanes: Record<string, Swimlane>;
+  tasks: Record<string, Task>;
+  boardOrderIds: string[];
+}) => {
+  const comparableTasks = normalizeTasksRecord(stripUndefinedFields(state.tasks));
+  const comparableSwimlanes = sortSwimlanesTaskIdsByPriority(
+    stripUndefinedFields(state.swimlanes),
+    comparableTasks
+  );
+  const comparableBoards = stripUndefinedFields(state.boards);
+  const comparableBoardOrderIds = stripUndefinedFields(state.boardOrderIds);
+
+  return {
+    boards: JSON.stringify(comparableBoards),
+    swimlanes: JSON.stringify(comparableSwimlanes),
+    tasks: JSON.stringify(comparableTasks),
+    boardOrderIds: JSON.stringify(comparableBoardOrderIds),
+  };
+};
 
 /** Writes board data immediately (no debounce). Use when boardOrderIds changes so refresh does not lose order. */
 const saveToFirestoreImmediate = (state: AppState) => {
@@ -640,10 +697,11 @@ export const useBoardStore = create<BoardStore>()(
           taskTitle = task.title;
           deleted = true;
           const h = mergeHistory(state, `Delete note for task "${task.title}"`);
+          const taskWithoutNote = withoutTaskNote(task);
           return {
             tasks: {
               ...state.tasks,
-              [taskId]: { ...task, note: undefined },
+              [taskId]: taskWithoutNote,
             },
             ...h,
           };
@@ -763,6 +821,50 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
+      cancelTaskSnooze: (taskId: string) => {
+        let taskTitle = '';
+        let cancelled = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task?.snooze || isTaskAwaitingAck(task)) {
+            return state;
+          }
+
+          taskTitle = task.title;
+          cancelled = true;
+          const taskWithoutSnooze = withoutTaskSnooze(task);
+          const nextTasks = {
+            ...state.tasks,
+            [taskId]: taskWithoutSnooze,
+          };
+          const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
+          const nextSwimlanes =
+            swimlaneId && state.swimlanes[swimlaneId]
+              ? {
+                  ...state.swimlanes,
+                  [swimlaneId]: {
+                    ...state.swimlanes[swimlaneId],
+                    taskIds: sortTaskIdsByPriority(
+                      moveTaskIdToFront(state.swimlanes[swimlaneId].taskIds, taskId),
+                      nextTasks
+                    ),
+                  },
+                }
+              : state.swimlanes;
+          const h = mergeHistory(state, `Cancel snooze for task "${task.title}"`);
+
+          return {
+            tasks: nextTasks,
+            swimlanes: nextSwimlanes,
+            ...h,
+          };
+        });
+
+        if (cancelled) {
+          showToast(`Snooze cancelled for "${taskTitle}"`, 'edit');
+        }
+      },
+
       acknowledgeTask: (taskId: string) => {
         let taskTitle = '';
         let acknowledged = false;
@@ -774,12 +876,10 @@ export const useBoardStore = create<BoardStore>()(
 
           taskTitle = task.title;
           acknowledged = true;
+          const taskWithoutSnooze = withoutTaskSnooze(task);
           const nextTasks = {
             ...state.tasks,
-            [taskId]: {
-              ...task,
-              snooze: undefined,
-            },
+            [taskId]: taskWithoutSnooze,
           };
           const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
           const nextSwimlanes =
@@ -1061,7 +1161,7 @@ export const useBoardStore = create<BoardStore>()(
               [taskId]: {
                 ...task,
                 subtasks: task.subtasks.map((st) =>
-                  st.id === subtaskId ? { ...st, note: undefined } : st
+                  st.id === subtaskId ? withoutSubtaskNote(st) : st
                 ),
               },
             },
@@ -1433,12 +1533,7 @@ function startFirestoreSync() {
       }
       
       // Only sync if task data changed (not UI settings like fontSize, activeBoardId; board themes are inside boards)
-      const currentTaskData = {
-        boards: JSON.stringify(state.boards),
-        swimlanes: JSON.stringify(state.swimlanes),
-        tasks: JSON.stringify(state.tasks),
-        boardOrderIds: JSON.stringify(state.boardOrderIds),
-      };
+      const currentTaskData = getComparableSyncData(state);
       
       const taskDataChanged = !prevTaskData ||
         currentTaskData.boards !== prevTaskData.boards ||
@@ -1488,7 +1583,9 @@ function startFirestoreSync() {
         if (snapshot.exists()) {
           const data = snapshot.data();
           const currentState = useBoardStore.getState();
-          const remoteBoards = (data.boards || {}) as Record<string, Board>;
+          const remoteBoards = stripUndefinedFields(
+            (data.boards || {}) as Record<string, Board>
+          );
           const remoteTasks = normalizeTasksRecord((data.tasks || {}) as Record<string, Task>);
           const remoteSwimlanes = sortSwimlanesTaskIdsByPriority(
             (data.swimlanes || {}) as Record<string, Swimlane>,
@@ -1499,11 +1596,18 @@ function startFirestoreSync() {
           const remoteOrderIds = Array.isArray(data.boardOrderIds)
             ? data.boardOrderIds
             : [];
+          const remoteComparable = getComparableSyncData({
+            boards: remoteBoards,
+            swimlanes: remoteSwimlanes,
+            tasks: remoteTasks,
+            boardOrderIds: remoteOrderIds,
+          });
+          const currentComparable = getComparableSyncData(currentState);
           const hasChanges =
-            JSON.stringify(remoteBoards) !== JSON.stringify(currentState.boards) ||
-            JSON.stringify(remoteSwimlanes) !== JSON.stringify(currentState.swimlanes) ||
-            JSON.stringify(remoteTasks) !== JSON.stringify(currentState.tasks) ||
-            JSON.stringify(remoteOrderIds) !== JSON.stringify(currentState.boardOrderIds);
+            remoteComparable.boards !== currentComparable.boards ||
+            remoteComparable.swimlanes !== currentComparable.swimlanes ||
+            remoteComparable.tasks !== currentComparable.tasks ||
+            remoteComparable.boardOrderIds !== currentComparable.boardOrderIds;
 
           if (hasChanges) {
             console.log('Applying remote Firestore update');

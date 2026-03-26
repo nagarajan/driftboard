@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, type WheelEvent as ReactWheelEvent } from 'react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent, CollisionDetection } from '@dnd-kit/core';
 import {
   DndContext,
@@ -71,6 +71,7 @@ export function Board({ board }: BoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<string | null>(null);
   const taskDragStartSwimlaneId = useRef<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Custom collision detection that filters based on what's being dragged
   const customCollisionDetection: CollisionDetection = useCallback((args) => {
@@ -316,6 +317,25 @@ export function Board({ board }: BoardProps) {
     }
   };
 
+  const handleBoardWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.metaKey || event.ctrlKey || !event.shiftKey) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container || container.scrollWidth <= container.clientWidth) {
+      return;
+    }
+
+    const primaryDelta = Math.abs(event.deltaX) > 0 ? event.deltaX : event.deltaY;
+    if (primaryDelta === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    container.scrollLeft += primaryDelta;
+  }, []);
+
   const getActiveTask = (): TaskType | null => {
     if (!activeId || activeType !== 'task') return null;
     const taskId = activeId.replace('task-', '');
@@ -343,7 +363,11 @@ export function Board({ board }: BoardProps) {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className={`flex-1 overflow-x-auto ${containerPaddingClasses[fontSize]}`}>
+      <div
+        ref={scrollContainerRef}
+        onWheelCapture={handleBoardWheel}
+        className={`flex-1 overflow-x-auto ${containerPaddingClasses[fontSize]}`}
+      >
         <div className={`flex h-full ${swimlaneGapClasses[fontSize]}`}>
           <SortableContext
             items={swimlaneIds}

@@ -26,6 +26,7 @@ interface TaskProps {
 }
 
 const SNOOZE_PRESETS = [
+  { label: '1 minute', getUntil: () => addMinutes(Date.now(), 1) },
   { label: '5 minutes', getUntil: () => addMinutes(Date.now(), 5) },
   { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
   { label: '15 minutes', getUntil: () => addMinutes(Date.now(), 15) },
@@ -44,6 +45,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
     toggleTaskComplete,
     addSubtask,
     snoozeTask,
+    cancelTaskSnooze,
     acknowledgeTask,
   } = useBoardStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -82,27 +84,37 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
   const awaitingAck = isTaskAwaitingAck(task);
   const snoozed = isTaskSnoozed(task);
   const snoozeLabel = awaitingAck
-    ? 'Ready now - acknowledge to stop bouncing'
+    ? 'Ready now - use Snooze -> Ack to clear the glow'
     : task.snooze
       ? `Snoozed until ${formatSnoozeUntil(task.snooze.until)}`
       : '';
 
   const menuActions: ItemMenuAction[] = [
-    ...(awaitingAck
-      ? [
-          {
-            label: 'Acknowledge task',
-            onSelect: () => acknowledgeTask(task.id),
-            highlighted: true,
-            tone: 'success' as const,
-          },
-        ]
-      : []),
     {
       label: 'Snooze',
-      highlighted: snoozed,
-      tone: 'warning' as const,
+      highlighted: snoozed || awaitingAck,
+      tone: awaitingAck ? 'success' as const : 'warning' as const,
       children: [
+        ...(awaitingAck
+          ? [
+              {
+                label: 'Ack',
+                onSelect: () => acknowledgeTask(task.id),
+                highlighted: true,
+                tone: 'success' as const,
+              },
+            ]
+          : []),
+        ...(snoozed
+          ? [
+              {
+                label: 'Cancel snooze',
+                onSelect: () => cancelTaskSnooze(task.id),
+                highlighted: true,
+                tone: 'warning' as const,
+              },
+            ]
+          : []),
         ...SNOOZE_PRESETS.map((preset) => ({
           label: preset.label,
           onSelect: () => snoozeTask(task.id, preset.getUntil()),
@@ -144,21 +156,24 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
 
   return (
     <>
-      <div className={awaitingAck ? 'task-ready-bounce' : ''}>
-        <div
-          ref={setNodeRef}
-          style={{
-            ...style,
-            backgroundColor: task.completed ? 'var(--bg-card-completed)' : 'var(--bg-card)',
-            borderColor: getPriorityBorderColor(
-              task.priority,
-              task.completed ? 'var(--border-completed)' : 'var(--border-card)'
-            ),
-          }}
-          className="min-w-0 overflow-visible rounded-lg border shadow-sm"
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-        >
+      <div
+        ref={setNodeRef}
+        style={{
+          ...style,
+          backgroundColor: task.completed ? 'var(--bg-card-completed)' : 'var(--bg-card)',
+          borderColor: awaitingAck
+            ? 'var(--accent-primary)'
+            : getPriorityBorderColor(
+                task.priority,
+                task.completed ? 'var(--border-completed)' : 'var(--border-card)'
+              ),
+        }}
+        className={`min-w-0 overflow-visible rounded-lg border shadow-sm ${
+          awaitingAck ? 'task-ready-glow' : ''
+        }`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
           <div
             className="flex items-start min-w-0"
             style={{
@@ -360,7 +375,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               )}
             </div>
           )}
-        </div>
       </div>
 
       <ConfirmDialog
