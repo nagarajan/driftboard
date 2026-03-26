@@ -4,9 +4,11 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities';
 import type { Task as TaskType } from '../types';
 import { EditableTitle } from './EditableTitle';
+import { ItemActionsMenu } from './ItemActionsMenu';
 import { Subtask } from './Subtask';
 import { ConfirmDialog } from './ConfirmDialog';
 import { useBoardStore } from '../store/boardStore';
+import { getPriorityBorderColor, sortSubtasksByPriority } from '../utils/priority';
 
 interface TaskProps {
   task: TaskType;
@@ -15,11 +17,20 @@ interface TaskProps {
 }
 
 export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
-  const { renameTask, deleteTask, toggleTaskComplete, addSubtask } = useBoardStore();
+  const {
+    renameTask,
+    setTaskPriority,
+    setTaskNote,
+    deleteTaskNote,
+    deleteTask,
+    toggleTaskComplete,
+    addSubtask,
+  } = useBoardStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isHovered, setIsHovered] = useState(false);
+  const [isNoteVisible, setIsNoteVisible] = useState(false);
 
   const {
     attributes,
@@ -37,13 +48,16 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
     },
   });
 
-  const subtaskIds = task.subtasks.map((st) => `subtask-${st.id}`);
+  const sortedSubtasks = sortSubtasksByPriority(task.subtasks);
+  const subtaskIds = sortedSubtasks.map((st) => `subtask-${st.id}`);
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  const hasNote = Boolean(task.note?.trim());
+  const noteButtonLabel = isNoteVisible ? 'Hide note' : hasNote ? 'Show note' : 'Add note';
 
   const handleDelete = () => {
     if (task.subtasks.length > 0) {
@@ -75,9 +89,12 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
         style={{
           ...style,
           backgroundColor: task.completed ? 'var(--bg-card-completed)' : 'var(--bg-card)',
-          borderColor: task.completed ? 'var(--border-completed)' : 'var(--border-card)',
+          borderColor: getPriorityBorderColor(
+            task.priority,
+            task.completed ? 'var(--border-completed)' : 'var(--border-card)'
+          ),
         }}
-        className="rounded-lg border shadow-sm min-w-0 overflow-hidden"
+        className="rounded-lg border shadow-sm min-w-0 overflow-visible"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -134,6 +151,14 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
             inputClassName="w-full"
           />
 
+          <ItemActionsMenu
+            priority={task.priority}
+            onPriorityChange={(priority) => setTaskPriority(task.id, priority)}
+            noteButtonLabel={noteButtonLabel}
+            onToggleNote={() => setIsNoteVisible((visible) => !visible)}
+            noteHighlighted={hasNote || isNoteVisible}
+          />
+
           <button
             onClick={handleDelete}
             className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
@@ -145,16 +170,55 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
           </button>
         </div>
 
+        {isNoteVisible && (
+          <div
+            className="flex items-start"
+            style={{
+              padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)',
+              gap: 'var(--gap-sm, 0.5rem)',
+            }}
+          >
+            <EditableTitle
+              value={task.note ?? ''}
+              onSave={(note) => setTaskNote(task.id, note)}
+              placeholder="Add a note..."
+              className="flex-1 text-[0.9em]"
+              style={{
+                color: task.completed ? 'var(--text-completed)' : 'var(--text-secondary)',
+                lineHeight: '1.35',
+              }}
+              inputClassName="w-full text-[0.9em]"
+            />
+            <button
+              onClick={() => {
+                deleteTaskNote(task.id);
+                setIsNoteVisible(false);
+              }}
+              className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
+              style={{
+                width: '1.75em',
+                height: '1.75em',
+              }}
+              title="Delete note"
+              aria-label="Delete note"
+            >
+              <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Subtasks area - only render if there's content to show */}
         {(task.subtasks.length > 0 || isAddingSubtask || isHovered) && (
           <div className="flex flex-col" style={{ padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)', gap: 'var(--gap-sm, 0.5rem)' }}>
             {isTaskDragging ? (
-              task.subtasks.map((subtask) => (
+              sortedSubtasks.map((subtask) => (
                 <Subtask key={subtask.id} subtask={subtask} taskId={task.id} disabled />
               ))
             ) : (
               <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
-                {task.subtasks.map((subtask) => (
+                {sortedSubtasks.map((subtask) => (
                   <Subtask key={subtask.id} subtask={subtask} taskId={task.id} />
                 ))}
               </SortableContext>

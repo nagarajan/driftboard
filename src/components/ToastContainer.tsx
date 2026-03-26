@@ -16,15 +16,21 @@ export function ToastContainer() {
       style={{ bottom: 20, right: 20 }}
       aria-live="polite"
     >
-      {items.map((t) => (
-        <div
-          key={t.id}
-          role="status"
-          className={`pointer-events-auto w-fit max-w-[min(calc(100vw-40px),32rem)] rounded-2xl px-4 py-px text-left text-sm font-medium leading-snug ${kindClasses[t.kind]}`}
-        >
-          {t.message}
-        </div>
-      ))}
+      {items.map((t, index) => {
+        const age = items.length - 1 - index;
+        const opacity = Math.max(0, 0.5 ** age);
+
+        return (
+          <div
+            key={t.id}
+            role="status"
+            className={`pointer-events-auto w-fit max-w-[min(calc(100vw-40px),32rem)] rounded-2xl px-4 py-px text-left text-sm font-medium leading-snug ${kindClasses[t.kind]}`}
+            style={{ opacity }}
+          >
+            {t.message}
+          </div>
+        );
+      })}
     </div>
   );
 }

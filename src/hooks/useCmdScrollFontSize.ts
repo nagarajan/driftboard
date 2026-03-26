@@ -9,14 +9,17 @@ export function useCmdScrollFontSize() {
   const fontSize = useUIStore((s) => s.fontSize);
   const setFontSize = useUIStore((s) => s.setFontSize);
   const fontSizeRef = useRef(fontSize);
-  fontSizeRef.current = fontSize;
+
+  useEffect(() => {
+    fontSizeRef.current = fontSize;
+  }, [fontSize]);
 
   useEffect(() => {
     const STEP_COOLDOWN_MS = 120;
     let lastStepTime = 0;
 
     const onWheel = (e: WheelEvent) => {
-      if (!e.metaKey && !e.ctrlKey) {
+      if ((!e.metaKey && !e.ctrlKey) || e.shiftKey) {
         return;
       }
       e.preventDefault();

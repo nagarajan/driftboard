@@ -72,7 +72,7 @@ body {
 
 /* Apply swimlane width */
 .swimlane-width {
-  width: var(--swimlane-width, 320px);
+  width: calc(var(--swimlane-width, 320px) * var(--swimlane-width-scale, 1));
 }
 
 /* ==================== PASTEL THEMES ==================== */
@@ -291,8 +291,8 @@ body {
   --bg-input: #374151;
   --bg-hover: #4b5563;
   --bg-active: #1e3a5f;
-  --border-default: #374151;
-  --border-card: #4b5563;
+  --border-default: #6b7280;
+  --border-card: #6b7280;
   --border-completed: #166534;
   --text-primary: #f9fafb;
   --text-secondary: #d1d5db;
@@ -302,6 +302,26 @@ body {
   --accent-primary: #60a5fa;
   --accent-success: #4ade80;
   --accent-danger: #f87171;
+}
+
+/* Priority border accents */
+.theme-rose,
+.theme-lavender,
+.theme-mint,
+.theme-peach {
+  --border-priority-high: #fca5a5;
+  --border-priority-medium: #fdba74;
+  --border-priority-low: #fde68a;
+}
+
+.theme-ocean,
+.theme-forest,
+.theme-sunset,
+.theme-grape,
+.theme-dark {
+  --border-priority-high: #b91c1c;
+  --border-priority-medium: #c2410c;
+  --border-priority-low: #ca8a04;
 }
 
 /* Apply theme colors */

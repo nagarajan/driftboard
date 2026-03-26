@@ -1,14 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { useBoardStore, initializeForUser } from './store/boardStore';
 import { useAuthStore, initializeAuthListener } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { DEFAULT_BOARD_THEME } from './types';
 import { useBoardRouting } from './hooks/useBoardRouting';
 import { useCmdScrollFontSize } from './hooks/useCmdScrollFontSize';
+import { useCmdShiftScrollSwimlaneWidth } from './hooks/useCmdShiftScrollSwimlaneWidth';
 import { useUndoRedoKeyboard } from './hooks/useUndoRedoKeyboard';
 import { Board } from './components/Board';
 import { BoardSwitcher } from './components/BoardSwitcher';
 import { FontSizeSelector } from './components/FontSizeSelector';
+import { SwimlaneWidthSelector } from './components/SwimlaneWidthSelector';
 import { ColorThemeSelector } from './components/ColorThemeSelector';
 import { ImportExportButtons } from './components/ImportExportButtons';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
@@ -42,11 +45,14 @@ const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 function App() {
   const { boards, activeBoardId } = useBoardStore();
   const { initialized } = useAuthStore();
-  const { fontSize } = useUIStore();
+  const { fontSize, swimlaneWidth } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const appStyle: CSSProperties = {
+    ['--swimlane-width-scale' as string]: swimlaneWidth / 100,
+  };
 
   // Initialize auth listener on mount
   useEffect(() => {
@@ -62,6 +68,7 @@ function App() {
 
   // Cmd+scroll (Ctrl+scroll on Windows/Linux) to change font size
   useCmdScrollFontSize();
+  useCmdShiftScrollSwimlaneWidth();
 
   useUndoRedoKeyboard();
 
@@ -91,7 +98,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${scaleClasses[fontSize]} ${getThemeClass(theme)}`}>
+    <div className={`min-h-screen flex flex-col ${scaleClasses[fontSize]} ${getThemeClass(theme)}`} style={appStyle}>
       {/* Header */}
       <header style={{ padding: '1em 1.5em', backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-between">
@@ -100,16 +107,7 @@ function App() {
             <BoardSwitcher />
           </div>
 
-          {/* Desktop controls */}
-          <div className="hidden min-[840px]:flex items-center" style={{ gap: '1em' }}>
-            <ImportExportButtons />
-            <ColorThemeSelector />
-            <FontSizeSelector />
-            <GoogleAccountWidget />
-          </div>
-
-          {/* Mobile hamburger menu */}
-          <div className="min-[840px]:hidden relative" ref={menuRef}>
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 rounded transition-colors hover:bg-[var(--bg-hover)]"
@@ -143,7 +141,10 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Size</p>
-                    <FontSizeSelector />
+                    <div className="flex flex-col gap-3">
+                      <FontSizeSelector />
+                      <SwimlaneWidthSelector />
+                    </div>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Account</p>

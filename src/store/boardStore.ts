@@ -3,10 +3,18 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme } from '../types';
+import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme, Priority } from '../types';
 import { DEFAULT_BOARD_THEME } from '../types';
 import { sanitizeEmail } from './authStore';
 import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
+import {
+  PRIORITY_LABELS,
+  normalizeTask,
+  normalizeTasksRecord,
+  sortSubtasksByPriority,
+  sortSwimlanesTaskIdsByPriority,
+  sortTaskIdsByPriority,
+} from '../utils/priority';
 import {
   mergeHistory,
   takeSnapshot,
@@ -22,7 +30,7 @@ export type { HistoryEntry } from '../utils/boardHistory';
 export type HistoryOptions = { skipHistory?: boolean };
 
 export interface ExportData {
-  /** v3+ includes per-board theme on each Board. */
+  /** v4+ includes per-board theme and task/subtask priority. */
   version: number;
   exportedAt: string;
   boards: Record<string, Board>;
@@ -57,6 +65,9 @@ interface BoardStore extends AppState {
   // Task actions
   addTask: (swimlaneId: string, title: string) => void;
   renameTask: (taskId: string, title: string) => void;
+  setTaskPriority: (taskId: string, priority: Priority) => void;
+  setTaskNote: (taskId: string, note: string) => void;
+  deleteTaskNote: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
   toggleTaskComplete: (taskId: string) => void;
   moveTask: (
@@ -71,6 +82,9 @@ interface BoardStore extends AppState {
   // Subtask actions
   addSubtask: (taskId: string, title: string) => void;
   renameSubtask: (taskId: string, subtaskId: string, title: string) => void;
+  setSubtaskPriority: (taskId: string, subtaskId: string, priority: Priority) => void;
+  setSubtaskNote: (taskId: string, subtaskId: string, note: string) => void;
+  deleteSubtaskNote: (taskId: string, subtaskId: string) => void;
   deleteSubtask: (taskId: string, subtaskId: string) => void;
   toggleSubtaskComplete: (taskId: string, subtaskId: string) => void;
   reorderSubtasks: (taskId: string, subtaskIds: string[], options?: HistoryOptions) => void;
@@ -105,6 +119,18 @@ const extendBlockPeriod = (ms: number) => {
   if (newBlockUntil > blockUntil) {
     blockUntil = newBlockUntil;
   }
+};
+
+const findSwimlaneIdForTask = (
+  swimlanes: Record<string, Swimlane>,
+  taskId: string
+): string | null => {
+  for (const swimlane of Object.values(swimlanes)) {
+    if (swimlane.taskIds.includes(taskId)) {
+      return swimlane.id;
+    }
+  }
+  return null;
 };
 
 const firestorePayload = (state: AppState) => ({
@@ -485,18 +511,23 @@ export const useBoardStore = create<BoardStore>()(
           id: uuidv4(),
           title,
           completed: false,
+          priority: 'none',
           subtasks: [],
         };
 
         set((state) => {
           const h = mergeHistory(state, `Add task "${title}"`);
+          const nextTasks = { ...state.tasks, [task.id]: task };
           return {
-            tasks: { ...state.tasks, [task.id]: task },
+            tasks: nextTasks,
             swimlanes: {
               ...state.swimlanes,
               [swimlaneId]: {
                 ...state.swimlanes[swimlaneId],
-                taskIds: [...state.swimlanes[swimlaneId].taskIds, task.id],
+                taskIds: sortTaskIdsByPriority(
+                  [...state.swimlanes[swimlaneId].taskIds, task.id],
+                  nextTasks
+                ),
               },
             },
             ...h,
@@ -517,6 +548,100 @@ export const useBoardStore = create<BoardStore>()(
           };
         });
         showToast(`Task renamed to "${title}"`, 'edit');
+      },
+
+      setTaskPriority: (taskId: string, priority: Priority) => {
+        let taskTitle = '';
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task || task.priority === priority) {
+            return state;
+          }
+
+          taskTitle = task.title;
+          const nextTasks = {
+            ...state.tasks,
+            [taskId]: { ...task, priority },
+          };
+          const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
+          const nextSwimlanes =
+            swimlaneId && state.swimlanes[swimlaneId]
+              ? {
+                  ...state.swimlanes,
+                  [swimlaneId]: {
+                    ...state.swimlanes[swimlaneId],
+                    taskIds: sortTaskIdsByPriority(state.swimlanes[swimlaneId].taskIds, nextTasks),
+                  },
+                }
+              : state.swimlanes;
+          const h = mergeHistory(
+            state,
+            `Set task "${task.title}" priority to ${PRIORITY_LABELS[priority].toLowerCase()}`
+          );
+
+          return {
+            tasks: nextTasks,
+            swimlanes: nextSwimlanes,
+            ...h,
+          };
+        });
+
+        if (taskTitle) {
+          showToast(
+            `Task "${taskTitle}" priority set to ${PRIORITY_LABELS[priority].toLowerCase()}`,
+            'edit'
+          );
+        }
+      },
+
+      setTaskNote: (taskId: string, note: string) => {
+        const trimmedNote = note.trim();
+        let taskTitle = '';
+        let saved = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task || !trimmedNote || task.note === trimmedNote) {
+            return state;
+          }
+          taskTitle = task.title;
+          saved = true;
+          const actionLabel = task.note ? 'Update' : 'Add';
+          const h = mergeHistory(state, `${actionLabel} note for task "${task.title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: { ...task, note: trimmedNote },
+            },
+            ...h,
+          };
+        });
+        if (saved) {
+          showToast(`Note saved for "${taskTitle}"`, 'edit');
+        }
+      },
+
+      deleteTaskNote: (taskId: string) => {
+        let taskTitle = '';
+        let deleted = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task || !task.note) {
+            return state;
+          }
+          taskTitle = task.title;
+          deleted = true;
+          const h = mergeHistory(state, `Delete note for task "${task.title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: { ...task, note: undefined },
+            },
+            ...h,
+          };
+        });
+        if (deleted) {
+          showToast(`Note deleted for "${taskTitle}"`, 'delete');
+        }
       },
 
       deleteTask: (taskId: string) => {
@@ -608,7 +733,7 @@ export const useBoardStore = create<BoardStore>()(
             }
             newSwimlanes[toSwimlaneId] = {
               ...newSwimlanes[toSwimlaneId],
-              taskIds: newTaskIds,
+              taskIds: sortTaskIdsByPriority(newTaskIds, state.tasks),
             };
           }
 
@@ -622,7 +747,10 @@ export const useBoardStore = create<BoardStore>()(
           return {
             swimlanes: {
               ...state.swimlanes,
-              [swimlaneId]: { ...state.swimlanes[swimlaneId], taskIds },
+              [swimlaneId]: {
+                ...state.swimlanes[swimlaneId],
+                taskIds: sortTaskIdsByPriority(taskIds, state.tasks),
+              },
             },
             ...h,
           };
@@ -635,6 +763,7 @@ export const useBoardStore = create<BoardStore>()(
           id: uuidv4(),
           title,
           completed: false,
+          priority: 'none',
         };
 
         set((state) => {
@@ -646,7 +775,7 @@ export const useBoardStore = create<BoardStore>()(
               ...state.tasks,
               [taskId]: {
                 ...task,
-                subtasks: [...task.subtasks, subtask],
+                subtasks: sortSubtasksByPriority([...task.subtasks, subtask]),
               },
             },
             ...h,
@@ -672,6 +801,113 @@ export const useBoardStore = create<BoardStore>()(
           };
         });
         showToast(`Subtask renamed to "${title}"`, 'edit');
+      },
+
+      setSubtaskPriority: (taskId: string, subtaskId: string, priority: Priority) => {
+        let subtaskTitle = '';
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) {
+            return state;
+          }
+
+          const subtask = task.subtasks.find((item) => item.id === subtaskId);
+          if (!subtask || subtask.priority === priority) {
+            return state;
+          }
+
+          subtaskTitle = subtask.title;
+          const h = mergeHistory(
+            state,
+            `Set subtask "${subtask.title}" priority to ${PRIORITY_LABELS[priority].toLowerCase()}`
+          );
+
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: sortSubtasksByPriority(
+                  task.subtasks.map((item) =>
+                    item.id === subtaskId ? { ...item, priority } : item
+                  )
+                ),
+              },
+            },
+            ...h,
+          };
+        });
+
+        if (subtaskTitle) {
+          showToast(
+            `Subtask "${subtaskTitle}" priority set to ${PRIORITY_LABELS[priority].toLowerCase()}`,
+            'edit'
+          );
+        }
+      },
+
+      setSubtaskNote: (taskId: string, subtaskId: string, note: string) => {
+        const trimmedNote = note.trim();
+        let subtaskTitle = '';
+        let saved = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task || !trimmedNote) return state;
+          const subtask = task.subtasks.find((st) => st.id === subtaskId);
+          if (!subtask || subtask.note === trimmedNote) {
+            return state;
+          }
+          subtaskTitle = subtask.title;
+          saved = true;
+          const actionLabel = subtask.note ? 'Update' : 'Add';
+          const h = mergeHistory(state, `${actionLabel} note for subtask "${subtask.title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: task.subtasks.map((st) =>
+                  st.id === subtaskId ? { ...st, note: trimmedNote } : st
+                ),
+              },
+            },
+            ...h,
+          };
+        });
+        if (saved) {
+          showToast(`Note saved for "${subtaskTitle}"`, 'edit');
+        }
+      },
+
+      deleteSubtaskNote: (taskId: string, subtaskId: string) => {
+        let subtaskTitle = '';
+        let deleted = false;
+        set((state) => {
+          const task = state.tasks[taskId];
+          if (!task) return state;
+          const subtask = task.subtasks.find((st) => st.id === subtaskId);
+          if (!subtask || !subtask.note) {
+            return state;
+          }
+          subtaskTitle = subtask.title;
+          deleted = true;
+          const h = mergeHistory(state, `Delete note for subtask "${subtask.title}"`);
+          return {
+            tasks: {
+              ...state.tasks,
+              [taskId]: {
+                ...task,
+                subtasks: task.subtasks.map((st) =>
+                  st.id === subtaskId ? { ...st, note: undefined } : st
+                ),
+              },
+            },
+            ...h,
+          };
+        });
+        if (deleted) {
+          showToast(`Note deleted for "${subtaskTitle}"`, 'delete');
+        }
       },
 
       deleteSubtask: (taskId: string, subtaskId: string) => {
@@ -753,7 +989,7 @@ export const useBoardStore = create<BoardStore>()(
               ...state.tasks,
               [taskId]: {
                 ...task,
-                subtasks: reorderedSubtasks,
+                subtasks: sortSubtasksByPriority(reorderedSubtasks),
               },
             },
             ...h,
@@ -786,7 +1022,7 @@ export const useBoardStore = create<BoardStore>()(
       getExportData: (): ExportData => {
         const state = get();
         return {
-          version: 3,
+          version: 4,
           exportedAt: new Date().toISOString(),
           boards: state.boards,
           swimlanes: state.swimlanes,
@@ -846,16 +1082,19 @@ export const useBoardStore = create<BoardStore>()(
               importedSwimlane.taskIds.forEach((oldTaskId) => {
                 const importedTask = data.tasks[oldTaskId];
                 if (importedTask) {
+                  const normalizedImportedTask = normalizeTask(importedTask);
                   const newTaskId = uuidv4();
                   newTaskIds.push(newTaskId);
 
-                  const newSubtasks = importedTask.subtasks.map((subtask) => ({
-                    ...subtask,
-                    id: uuidv4(),
-                  }));
+                  const newSubtasks = sortSubtasksByPriority(
+                    normalizedImportedTask.subtasks.map((subtask) => ({
+                      ...subtask,
+                      id: uuidv4(),
+                    }))
+                  );
 
                   newTasks[newTaskId] = {
-                    ...importedTask,
+                    ...normalizedImportedTask,
                     id: newTaskId,
                     subtasks: newSubtasks,
                   };
@@ -865,7 +1104,7 @@ export const useBoardStore = create<BoardStore>()(
               newSwimlanes[newSwimlaneId] = {
                 ...importedSwimlane,
                 id: newSwimlaneId,
-                taskIds: newTaskIds,
+                taskIds: sortTaskIdsByPriority(newTaskIds, newTasks),
               };
             }
           });
@@ -902,7 +1141,7 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
-      version: 3,
+      version: 4,
       /** Persist data fields only; boardOrderIds must be included so board order survives refresh. */
       partialize: (state) => ({
         boards: state.boards,
@@ -945,6 +1184,15 @@ export const useBoardStore = create<BoardStore>()(
           const rest = { ...s };
           delete rest.theme;
           state = { ...rest, boards };
+        }
+        if (version < 4) {
+          const s = state as Record<string, unknown>;
+          const tasks = normalizeTasksRecord((s.tasks as Record<string, Task>) || {});
+          const swimlanes = sortSwimlanesTaskIdsByPriority(
+            ((s.swimlanes as Record<string, Swimlane>) || {}),
+            tasks
+          );
+          state = { ...s, tasks, swimlanes };
         }
         return state;
       },
@@ -1068,15 +1316,21 @@ function startFirestoreSync() {
         if (snapshot.exists()) {
           const data = snapshot.data();
           const currentState = useBoardStore.getState();
+          const remoteBoards = (data.boards || {}) as Record<string, Board>;
+          const remoteTasks = normalizeTasksRecord((data.tasks || {}) as Record<string, Task>);
+          const remoteSwimlanes = sortSwimlanesTaskIdsByPriority(
+            (data.swimlanes || {}) as Record<string, Swimlane>,
+            remoteTasks
+          );
 
           // Only update if task data is different (not UI settings)
           const remoteOrderIds = Array.isArray(data.boardOrderIds)
             ? data.boardOrderIds
             : [];
           const hasChanges =
-            JSON.stringify(data.boards) !== JSON.stringify(currentState.boards) ||
-            JSON.stringify(data.swimlanes) !== JSON.stringify(currentState.swimlanes) ||
-            JSON.stringify(data.tasks) !== JSON.stringify(currentState.tasks) ||
+            JSON.stringify(remoteBoards) !== JSON.stringify(currentState.boards) ||
+            JSON.stringify(remoteSwimlanes) !== JSON.stringify(currentState.swimlanes) ||
+            JSON.stringify(remoteTasks) !== JSON.stringify(currentState.tasks) ||
             JSON.stringify(remoteOrderIds) !== JSON.stringify(currentState.boardOrderIds);
 
           if (hasChanges) {
@@ -1084,14 +1338,14 @@ function startFirestoreSync() {
             currentState._setIsRemoteUpdate(true);
             // Only update task data, preserve local UI settings
             useBoardStore.setState({
-              boards: data.boards || {},
-              swimlanes: data.swimlanes || {},
-              tasks: data.tasks || {},
+              boards: remoteBoards,
+              swimlanes: remoteSwimlanes,
+              tasks: remoteTasks,
               boardOrderIds: remoteOrderIds,
               ...emptyHistoryState,
             });
             // Update activeBoardId if current one doesn't exist
-            const newBoards = data.boards || {};
+            const newBoards = remoteBoards;
             if (!newBoards[currentState.activeBoardId || '']) {
               const firstBoardId = getFirstBoardId(newBoards, remoteOrderIds);
               useBoardStore.setState({ activeBoardId: firstBoardId });

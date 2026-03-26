@@ -1,5 +1,81 @@
-import type { KeyboardEvent, CSSProperties } from 'react';
+import type { KeyboardEvent, CSSProperties, ReactNode } from 'react';
 import { useState, useRef, useEffect, useCallback } from 'react';
+
+const URL_PATTERN = /((https?:\/\/|www\.)[^\s]+)/gi;
+const TRAILING_URL_PUNCTUATION = /[.,!?;:]+$/;
+
+function normalizeUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `https://${url}`;
+}
+
+function splitTrailingPunctuation(url: string): { linkText: string; trailingText: string } {
+  const trailingMatch = url.match(TRAILING_URL_PUNCTUATION);
+  if (!trailingMatch) {
+    return { linkText: url, trailingText: '' };
+  }
+
+  const trailingText = trailingMatch[0];
+  return {
+    linkText: url.slice(0, -trailingText.length),
+    trailingText,
+  };
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return Boolean(target.closest('a, button, input, textarea, select, option, [role="button"]'));
+}
+
+function renderTextWithLinks(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const matchedUrl = match[0];
+    const matchIndex = match.index ?? 0;
+
+    if (matchIndex > lastIndex) {
+      parts.push(text.slice(lastIndex, matchIndex));
+    }
+
+    const { linkText, trailingText } = splitTrailingPunctuation(matchedUrl);
+
+    if (linkText) {
+      parts.push(
+        <a
+          key={`${matchIndex}-${linkText}`}
+          href={normalizeUrl(linkText)}
+          target="_blank"
+          rel="noreferrer"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="underline"
+          style={{ color: 'var(--accent-primary)' }}
+        >
+          {linkText}
+        </a>
+      );
+    }
+
+    if (trailingText) {
+      parts.push(trailingText);
+    }
+
+    lastIndex = matchIndex + matchedUrl.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
 
 interface EditableTitleProps {
   value: string;
@@ -78,8 +154,7 @@ export function EditableTitle({
       setIsEditing(false);
       return;
     }
-    const isModEnter = e.key === 'Enter' && (e.ctrlKey || e.metaKey);
-    if (isModEnter) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       skipBlurSaveRef.current = true;
       commitEdit();
@@ -114,7 +189,7 @@ export function EditableTitle({
         onClick={(e) => e.stopPropagation()}
         placeholder={placeholder}
         rows={1}
-        title="Ctrl+Enter or Cmd+Enter to save"
+        title="Enter to save, Shift+Enter for newline"
         className={`border rounded px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName}`}
         style={textControlStyle}
       />
@@ -125,6 +200,9 @@ export function EditableTitle({
     <div
       onClick={(e) => {
         e.stopPropagation();
+        if (isInteractiveTarget(e.target)) {
+          return;
+        }
         skipBlurSaveRef.current = false;
         setIsEditing(true);
       }}
@@ -138,7 +216,7 @@ export function EditableTitle({
       }}
       title="Click to edit"
     >
-      {value || placeholder}
+      {value ? renderTextWithLinks(value) : placeholder}
     </div>
   );
 }

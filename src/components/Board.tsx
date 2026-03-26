@@ -19,6 +19,11 @@ import { Swimlane } from './Swimlane';
 import { useBoardStore } from '../store/boardStore';
 import { useUIStore } from '../store/uiStore';
 import { showToast } from '../store/toastStore';
+import {
+  getPriorityBorderColor,
+  sortSubtasksByPriority,
+  sortTaskIdsByPriority,
+} from '../utils/priority';
 
 function findSwimlaneIdForTask(
   swimlanes: Record<string, SwimlaneType>,
@@ -261,11 +266,12 @@ export function Board({ board }: BoardProps) {
       if (overTaskId && swimlaneId && taskId !== overTaskId) {
         const swimlane = swimlanes[swimlaneId];
         if (swimlane) {
-          const oldIndex = swimlane.taskIds.indexOf(taskId);
-          const newIndex = swimlane.taskIds.indexOf(overTaskId);
+          const sortedTaskIds = sortTaskIdsByPriority(swimlane.taskIds, tasks);
+          const oldIndex = sortedTaskIds.indexOf(taskId);
+          const newIndex = sortedTaskIds.indexOf(overTaskId);
 
           if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-            const newOrder = arrayMove(swimlane.taskIds, oldIndex, newIndex);
+            const newOrder = arrayMove(sortedTaskIds, oldIndex, newIndex);
             reorderTasks(swimlaneId, newOrder, { skipHistory: true });
             didReorder = true;
             const crossedLane = Boolean(startSl && startSl !== swimlaneId);
@@ -295,7 +301,7 @@ export function Board({ board }: BoardProps) {
         if (taskId === overTaskId) {
           const task = tasks[taskId];
           if (task) {
-            const subtaskIds = task.subtasks.map((st) => st.id);
+            const subtaskIds = sortSubtasksByPriority(task.subtasks).map((st) => st.id);
             const oldIndex = subtaskIds.indexOf(activeData.subtask.id);
             const newIndex = subtaskIds.indexOf(overData.subtask.id);
 
@@ -344,7 +350,7 @@ export function Board({ board }: BoardProps) {
             strategy={horizontalListSortingStrategy}
           >
             {boardSwimlanes.map((swimlane) => {
-              const swimlaneTasks = swimlane.taskIds
+              const swimlaneTasks = sortTaskIdsByPriority(swimlane.taskIds, tasks)
                 .map((id) => tasks[id])
                 .filter(Boolean);
 
@@ -379,17 +385,35 @@ export function Board({ board }: BoardProps) {
 
       <DragOverlay>
         {activeType === 'task' && getActiveTask() && (
-          <div className="rounded-lg border shadow-lg p-3 w-72 opacity-90" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div
+            className="rounded-lg border shadow-lg p-3 w-72 opacity-90"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderColor: getPriorityBorderColor(
+                getActiveTask()?.priority,
+                'var(--border-card)'
+              ),
+            }}
+          >
             <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{getActiveTask()?.title}</p>
           </div>
         )}
         {activeType === 'subtask' && getActiveSubtask() && (
-          <div className="rounded border shadow-lg p-2 ml-4 opacity-90" style={{ backgroundColor: 'var(--bg-subtask)', borderColor: 'var(--border-card)' }}>
+          <div
+            className="rounded border shadow-lg p-2 ml-4 opacity-90"
+            style={{
+              backgroundColor: 'var(--bg-subtask)',
+              borderColor: getPriorityBorderColor(
+                getActiveSubtask()?.subtask.priority,
+                'var(--border-card)'
+              ),
+            }}
+          >
             <p className="text-[0.9em]" style={{ color: 'var(--text-primary)' }}>{getActiveSubtask()?.subtask.title}</p>
           </div>
         )}
         {activeType === 'swimlane' && (
-          <div className="rounded-lg shadow-lg p-4 w-80 opacity-90" style={{ backgroundColor: 'var(--bg-swimlane)' }}>
+          <div className="rounded-lg shadow-lg p-4 swimlane-width opacity-90" style={{ backgroundColor: 'var(--bg-swimlane)' }}>
             <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>Moving swimlane...</p>
           </div>
         )}

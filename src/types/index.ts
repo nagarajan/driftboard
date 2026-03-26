@@ -1,13 +1,19 @@
+export type Priority = 'high' | 'medium' | 'low' | 'none';
+
 export interface Subtask {
   id: string;
   title: string;
   completed: boolean;
+  priority: Priority;
+  note?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  priority: Priority;
+  note?: string;
   subtasks: Subtask[];
 }
 
@@ -18,6 +24,7 @@ export interface Swimlane {
 }
 
 export type FontSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+export type SwimlaneWidth = 75 | 100 | 125 | 150 | 175 | 200;
 
 // Pastel themes: rose, lavender, mint, peach
 // Saturated themes: ocean, forest, sunset, grape
