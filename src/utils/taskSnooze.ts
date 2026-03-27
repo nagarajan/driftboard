@@ -1,4 +1,4 @@
-import type { Task, TaskSnooze } from '../types';
+import type { Task, TaskSnooze, Board, Swimlane } from '../types';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -78,6 +78,24 @@ export function formatSnoozeUntil(until: number, now: number = Date.now()): stri
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+export function getAwaitingAckCount(
+  board: Board,
+  swimlanes: Record<string, Swimlane>,
+  tasks: Record<string, Task>,
+  now: number = Date.now()
+): number {
+  let count = 0;
+  for (const swimlaneId of board.swimlaneIds) {
+    const swimlane = swimlanes[swimlaneId];
+    if (!swimlane) continue;
+    for (const taskId of swimlane.taskIds) {
+      const task = tasks[taskId];
+      if (task && isTaskAwaitingAck(task, now)) count++;
+    }
+  }
+  return count;
 }
 
 export function toDateTimeLocalValue(timestamp: number): string {

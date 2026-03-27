@@ -16,6 +16,7 @@ import { ColorThemeSelector } from './components/ColorThemeSelector';
 import { ImportExportButtons } from './components/ImportExportButtons';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
 import { ToastContainer } from './components/ToastContainer';
+import { getAwaitingAckCount } from './utils/taskSnooze';
 
 const scaleClasses = {
   xs: 'scale-xs',
@@ -53,10 +54,13 @@ const themeClasses: Record<string, string> = {
 const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 
 function App() {
-  const { boards, activeBoardId, activateDueSnoozedTasks } = useBoardStore();
+  const { boards, activeBoardId, activateDueSnoozedTasks, swimlanes, tasks } = useBoardStore();
   const { initialized } = useAuthStore();
   const { fontSize, swimlaneWidth } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
+  const activeBoardAckCount = activeBoard
+    ? getAwaitingAckCount(activeBoard, swimlanes, tasks)
+    : 0;
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -124,6 +128,22 @@ function App() {
           <div className="flex items-center" style={{ gap: '1em' }}>
             <h1 className="font-bold" style={{ fontSize: '1.5em', color: 'var(--text-header)' }}>Task Board</h1>
             <BoardSwitcher />
+            {activeBoardAckCount > 0 && (
+              <div
+                className="badge-glow flex items-center justify-center rounded-full font-bold"
+                style={{
+                  minWidth: '1.6em',
+                  height: '1.6em',
+                  padding: '0 0.4em',
+                  fontSize: '0.8em',
+                  backgroundColor: 'var(--accent-primary)',
+                  color: '#ffffff',
+                }}
+                title={`${activeBoardAckCount} task${activeBoardAckCount === 1 ? '' : 's'} ready to acknowledge`}
+              >
+                {activeBoardAckCount}
+              </div>
+            )}
           </div>
 
           <div className="relative" ref={menuRef}>

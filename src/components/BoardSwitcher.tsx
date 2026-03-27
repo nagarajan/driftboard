@@ -18,7 +18,8 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../store/boardStore';
 import { getOrderedBoardIds } from '../utils/boardOrder';
-import type { Board } from '../types';
+import { getAwaitingAckCount } from '../utils/taskSnooze';
+import type { Board, Swimlane, Task } from '../types';
 
 type BoardListRowProps = {
   board: Board;
@@ -28,6 +29,7 @@ type BoardListRowProps = {
   editBoardName: string;
   setEditBoardName: (v: string) => void;
   dragDisabled: boolean;
+  awaitingAckCount: number;
   onRowClick: () => void;
   onConfirmDelete: (e: React.MouseEvent) => void;
   onCancelDelete: (e: React.MouseEvent) => void;
@@ -45,6 +47,7 @@ function BoardListRow({
   editBoardName,
   setEditBoardName,
   dragDisabled,
+  awaitingAckCount,
   onRowClick,
   onConfirmDelete,
   onCancelDelete,
@@ -166,6 +169,23 @@ function BoardListRow({
             {board.name}
           </span>
 
+          {awaitingAckCount > 0 && (
+            <div
+              className="badge-glow flex items-center justify-center rounded-full font-bold shrink-0"
+              style={{
+                minWidth: '1.4em',
+                height: '1.4em',
+                padding: '0 0.35em',
+                fontSize: '0.75em',
+                backgroundColor: 'var(--accent-primary)',
+                color: '#ffffff',
+              }}
+              title={`${awaitingAckCount} task${awaitingAckCount === 1 ? '' : 's'} ready to acknowledge`}
+            >
+              {awaitingAckCount}
+            </div>
+          )}
+
           <button
             onClick={(e) => onEditClick(board.id, board.name, e)}
             className="rounded-md p-1.5 text-[var(--text-muted)] opacity-0 transition-all duration-150 group-hover:opacity-100 hover:opacity-100 hover:scale-105 hover:bg-[var(--bg-active)] hover:text-[var(--accent-primary)] hover:shadow-md hover:ring-2 hover:ring-[var(--accent-primary)]/45"
@@ -208,6 +228,8 @@ export function BoardSwitcher() {
     renameBoard,
     deleteBoard,
     reorderBoardsByDrag,
+    swimlanes,
+    tasks,
   } = useBoardStore();
 
   const sensors = useSensors(
@@ -340,6 +362,7 @@ export function BoardSwitcher() {
                     editBoardName={editBoardName}
                     setEditBoardName={setEditBoardName}
                     dragDisabled={boardToDelete === board.id || boardToEdit === board.id}
+                    awaitingAckCount={getAwaitingAckCount(board, swimlanes as Record<string, Swimlane>, tasks as Record<string, Task>)}
                     onRowClick={() => {
                       setActiveBoard(board.id);
                       setIsOpen(false);
