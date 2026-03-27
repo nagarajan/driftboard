@@ -70,7 +70,7 @@ function SubtaskContent({
             value={subtask.title}
             onSave={(title) => renameSubtask(taskId, subtask.id, title)}
             className={`text-[0.9em] ${subtask.completed ? 'line-through' : ''}`}
-            style={{ color: subtask.completed ? 'var(--text-completed)' : 'var(--text-primary)' }}
+            style={{ color: 'var(--text-primary)' }}
             inputClassName="text-[0.9em] w-full"
             renderMode="markdown"
           />
@@ -130,7 +130,7 @@ function SubtaskContent({
               placeholder="Add a note..."
               className="flex-1 text-[0.85em]"
               style={{
-                color: subtask.completed ? 'var(--text-completed)' : 'var(--text-secondary)',
+                color: 'var(--text-secondary)',
                 lineHeight: '1.35',
               }}
               inputClassName="w-full text-[0.85em]"
@@ -189,7 +189,7 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
       className="rounded border min-w-0 overflow-visible"
       style={{
         ...style,
-        backgroundColor: subtask.completed ? 'var(--bg-subtask-completed)' : 'var(--bg-subtask)',
+        backgroundColor: 'var(--bg-subtask)',
         borderColor: getPriorityBorderColor(
           subtask.priority,
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'
@@ -229,7 +229,7 @@ function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: stri
   return (
     <div
       style={{
-        backgroundColor: subtask.completed ? 'var(--bg-subtask-completed)' : 'var(--bg-subtask)',
+        backgroundColor: 'var(--bg-subtask)',
         borderColor: getPriorityBorderColor(
           subtask.priority,
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'

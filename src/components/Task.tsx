@@ -160,7 +160,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
         ref={setNodeRef}
         style={{
           ...style,
-          backgroundColor: task.completed ? 'var(--bg-card-completed)' : 'var(--bg-card)',
+          backgroundColor: 'var(--bg-card)',
           borderColor: awaitingAck
             ? 'var(--accent-primary)'
             : getPriorityBorderColor(
@@ -228,7 +228,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 onSave={(title) => renameTask(task.id, title)}
                 className={`font-medium ${task.completed ? 'line-through' : ''}`}
                 style={{
-                  color: task.completed ? 'var(--text-completed)' : 'var(--text-primary)',
+                  color: 'var(--text-primary)',
                   lineHeight: '1.2',
                 }}
                 inputClassName="w-full"
@@ -310,7 +310,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                   placeholder="Add a note..."
                   className="flex-1 text-[0.9em]"
                   style={{
-                    color: task.completed ? 'var(--text-completed)' : 'var(--text-secondary)',
+                    color: 'var(--text-secondary)',
                     lineHeight: '1.35',
                   }}
                   inputClassName="w-full text-[0.9em]"
