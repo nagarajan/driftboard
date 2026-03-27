@@ -24,6 +24,10 @@ import {
   MAX_HISTORY,
   type HistoryEntry,
 } from '../utils/boardHistory';
+import {
+  notifyTaskUnsnoozed,
+  requestSystemNotificationPermission,
+} from '../utils/systemNotifications';
 import { showToast } from './toastStore';
 
 export type { HistoryEntry } from '../utils/boardHistory';
@@ -133,6 +137,18 @@ const findSwimlaneIdForTask = (
   for (const swimlane of Object.values(swimlanes)) {
     if (swimlane.taskIds.includes(taskId)) {
       return swimlane.id;
+    }
+  }
+  return null;
+};
+
+const findBoardIdForSwimlane = (
+  boards: Record<string, Board>,
+  swimlaneId: string
+): string | null => {
+  for (const board of Object.values(boards)) {
+    if (board.swimlaneIds.includes(swimlaneId)) {
+      return board.id;
     }
   }
   return null;
@@ -818,6 +834,7 @@ export const useBoardStore = create<BoardStore>()(
 
         if (saved) {
           showToast(`Task "${taskTitle}" snoozed until ${formatSnoozeUntil(until)}`, 'edit');
+          void requestSystemNotificationPermission();
         }
       },
 
@@ -911,17 +928,38 @@ export const useBoardStore = create<BoardStore>()(
 
       activateDueSnoozedTasks: (now: number = Date.now()) => {
         let activatedCount = 0;
+        let activatedTasks: Array<{
+          taskId: string;
+          taskTitle: string;
+          boardName?: string;
+          swimlaneTitle?: string;
+          unsnoozedAt: number;
+        }> = [];
         set((state) => {
-          const dueTaskIds = Object.values(state.tasks)
+          const dueTasks = Object.values(state.tasks)
             .filter((task) => task.snooze && !task.snooze.awaitingAck && task.snooze.until <= now)
-            .sort((a, b) => a.snooze!.until - b.snooze!.until)
-            .map((task) => task.id);
+            .sort((a, b) => a.snooze!.until - b.snooze!.until);
+          const dueTaskIds = dueTasks.map((task) => task.id);
 
           if (dueTaskIds.length === 0) {
             return state;
           }
 
           activatedCount = dueTaskIds.length;
+          activatedTasks = dueTasks.map((task) => {
+            const swimlaneId = findSwimlaneIdForTask(state.swimlanes, task.id);
+            const swimlaneTitle = swimlaneId ? state.swimlanes[swimlaneId]?.title : undefined;
+            const boardId = swimlaneId ? findBoardIdForSwimlane(state.boards, swimlaneId) : null;
+            const boardName = boardId ? state.boards[boardId]?.name : undefined;
+
+            return {
+              taskId: task.id,
+              taskTitle: task.title,
+              boardName,
+              swimlaneTitle,
+              unsnoozedAt: task.snooze!.until,
+            };
+          });
           const dueTaskIdSet = new Set(dueTaskIds);
           const nextTasks = { ...state.tasks };
           dueTaskIds.forEach((taskId) => {
@@ -964,6 +1002,9 @@ export const useBoardStore = create<BoardStore>()(
             activatedCount === 1 ? '1 snoozed task is ready' : `${activatedCount} snoozed tasks are ready`,
             'move'
           );
+          activatedTasks.forEach((task) => {
+            notifyTaskUnsnoozed(task);
+          });
         }
       },
 
