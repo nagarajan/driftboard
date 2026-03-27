@@ -184,7 +184,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               className="grid min-w-0 items-center"
               style={{
                 columnGap: 'var(--gap-sm, 0.5rem)',
-                gridTemplateColumns: 'auto auto minmax(0, 1fr) auto auto',
+                gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
                 minHeight: '1.75em',
               }}
             >
@@ -232,27 +232,43 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                   lineHeight: '1.2',
                 }}
                 inputClassName="w-full"
+                renderMode="markdown"
               />
             </div>
 
-            <ItemActionsMenu
-              priority={task.priority}
-              onPriorityChange={(priority) => setTaskPriority(task.id, priority)}
-              noteButtonLabel={noteButtonLabel}
-              onToggleNote={() => setIsNoteVisible((visible) => !visible)}
-              noteHighlighted={hasNote || isNoteVisible}
-              actions={menuActions}
-            />
+            <div className="flex items-center flex-shrink-0" style={{ gap: '0.1em' }}>
+              <button
+                onClick={() => setIsNoteVisible((visible) => !visible)}
+                className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
+                style={{
+                  width: '1.75em',
+                  height: '1.75em',
+                  color: (hasNote || isNoteVisible) ? 'var(--accent-success)' : 'var(--text-muted)',
+                }}
+                title={noteButtonLabel}
+                aria-label={noteButtonLabel}
+              >
+                <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
 
-            <button
-              onClick={handleDelete}
-              className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
-              title="Delete task"
-            >
-              <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+              <button
+                onClick={handleDelete}
+                className="flex items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
+                title="Delete task"
+              >
+                <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              <ItemActionsMenu
+                priority={task.priority}
+                onPriorityChange={(priority) => setTaskPriority(task.id, priority)}
+                actions={menuActions}
+              />
+            </div>
             </div>
 
             {snoozeLabel && (
@@ -277,40 +293,47 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
 
           {isNoteVisible && (
             <div
-              className="flex items-start"
               style={{
                 padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)',
-                gap: 'var(--gap-sm, 0.5rem)',
               }}
             >
-              <EditableTitle
-                value={task.note ?? ''}
-                onSave={(note) => setTaskNote(task.id, note)}
-                placeholder="Add a note..."
-                className="flex-1 text-[0.9em]"
+              <div
+                className="note-surface flex items-start rounded-md border"
                 style={{
-                  color: task.completed ? 'var(--text-completed)' : 'var(--text-secondary)',
-                  lineHeight: '1.35',
+                  gap: 'var(--gap-sm, 0.5rem)',
+                  padding: '0.5rem 0.625rem',
                 }}
-                inputClassName="w-full text-[0.9em]"
-              />
-              <button
-                onClick={() => {
-                  deleteTaskNote(task.id);
-                  setIsNoteVisible(false);
-                }}
-                className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
-                style={{
-                  width: '1.75em',
-                  height: '1.75em',
-                }}
-                title="Delete note"
-                aria-label="Delete note"
               >
-                <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
+                <EditableTitle
+                  value={task.note ?? ''}
+                  onSave={(note) => setTaskNote(task.id, note)}
+                  placeholder="Add a note..."
+                  className="flex-1 text-[0.9em]"
+                  style={{
+                    color: task.completed ? 'var(--text-completed)' : 'var(--text-secondary)',
+                    lineHeight: '1.35',
+                  }}
+                  inputClassName="w-full text-[0.9em]"
+                  renderMode="markdown"
+                />
+                <button
+                  onClick={() => {
+                    deleteTaskNote(task.id);
+                    setIsNoteVisible(false);
+                  }}
+                  className="flex flex-shrink-0 items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
+                  style={{
+                    width: '1.75em',
+                    height: '1.75em',
+                  }}
+                  title="Delete note"
+                  aria-label="Delete note"
+                >
+                  <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             </div>
           )}
 
@@ -329,7 +352,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               )}
 
               {isAddingSubtask ? (
-                <div className="ml-4 flex items-center" style={{ gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
+                <div style={{ marginLeft: '0.375rem', display: 'flex', alignItems: 'center', gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
                   <input
                     type="text"
                     value={newSubtaskTitle}
@@ -378,8 +401,8 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 isHovered && (
                   <button
                     onClick={() => setIsAddingSubtask(true)}
-                    className="ml-4 flex items-center gap-1 rounded py-1 text-[0.9em] transition-all duration-150 hover:opacity-70 active:scale-[0.98] active:opacity-50"
-                    style={{ color: 'var(--text-secondary)' }}
+                    className="flex items-center gap-1 rounded py-1 text-[0.9em] transition-all duration-150 hover:opacity-70 active:scale-[0.98] active:opacity-50"
+                    style={{ color: 'var(--text-secondary)', marginLeft: '0.375rem' }}
                   >
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

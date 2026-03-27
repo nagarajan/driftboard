@@ -13,18 +13,12 @@ export interface ItemMenuAction {
 interface ItemActionsMenuProps {
   priority: Priority;
   onPriorityChange: (priority: Priority) => void;
-  noteButtonLabel: string;
-  onToggleNote: () => void;
-  noteHighlighted?: boolean;
   actions?: ItemMenuAction[];
 }
 
 export function ItemActionsMenu({
   priority,
   onPriorityChange,
-  noteButtonLabel,
-  onToggleNote,
-  noteHighlighted = false,
   actions = [],
 }: ItemActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -108,23 +102,8 @@ export function ItemActionsMenu({
             borderColor: 'var(--border-default)',
           }}
         >
-          <button
-            type="button"
-            onClick={() => {
-              onToggleNote();
-              setIsOpen(false);
-              setOpenSubmenuLabel(null);
-            }}
-            className="w-full rounded px-2 py-1.5 text-left text-[0.85em] transition-colors hover:bg-[var(--bg-hover)]"
-            style={{
-              color: noteHighlighted ? 'var(--accent-success)' : 'var(--text-primary)',
-            }}
-          >
-            {noteButtonLabel}
-          </button>
-
           {actions.length > 0 && (
-            <div className="mt-2 space-y-1">
+            <div className="space-y-1">
               {actions.map((action) => {
                 const color = getActionColor(action);
                 const hasChildren = Boolean(action.children && action.children.length > 0);
@@ -193,7 +172,7 @@ export function ItemActionsMenu({
           )}
 
           <div
-            className="mt-2 flex items-center justify-between gap-3 rounded px-2 py-1.5"
+            className="flex items-center justify-between gap-3 rounded px-2 py-1.5"
             style={{ backgroundColor: 'var(--bg-hover)' }}
           >
             <span className="text-[0.8em]" style={{ color: 'var(--text-secondary)' }}>

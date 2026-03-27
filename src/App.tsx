@@ -141,19 +141,20 @@ function App() {
               >
                 <div className="flex flex-col gap-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Data</p>
-                    <ImportExportButtons />
+                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Font Size</p>
+                    <FontSizeSelector />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Swimlane Size</p>
+                    <SwimlaneWidthSelector />
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Theme</p>
                     <ColorThemeSelector />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Size</p>
-                    <div className="flex flex-col gap-3">
-                      <FontSizeSelector />
-                      <SwimlaneWidthSelector />
-                    </div>
+                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Data</p>
+                    <ImportExportButtons />
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Account</p>
