@@ -175,13 +175,19 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
         onMouseLeave={() => setIsHovered(false)}
       >
           <div
-            className="flex items-start min-w-0"
+            className="min-w-0"
             style={{
               padding: 'var(--padding-card-sm, 0.25rem) var(--padding-card, 0.75rem)',
-              gap: 'var(--gap-sm, 0.5rem)',
-              minHeight: '1.75em',
             }}
           >
+            <div
+              className="grid min-w-0 items-center"
+              style={{
+                columnGap: 'var(--gap-sm, 0.5rem)',
+                gridTemplateColumns: 'auto auto minmax(0, 1fr) auto auto',
+                minHeight: '1.75em',
+              }}
+            >
             <button
               {...attributes}
               {...listeners}
@@ -216,7 +222,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               )}
             </button>
 
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <EditableTitle
                 value={task.title}
                 onSave={(title) => renameTask(task.id, title)}
@@ -227,17 +233,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 }}
                 inputClassName="w-full"
               />
-
-              {snoozeLabel && (
-                <p
-                  className="mt-1 text-[0.8em]"
-                  style={{
-                    color: awaitingAck ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                  }}
-                >
-                  {snoozeLabel}
-                </p>
-              )}
             </div>
 
             <ItemActionsMenu
@@ -258,6 +253,26 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
             </button>
+            </div>
+
+            {snoozeLabel && (
+              <div
+                style={{
+                  marginTop: '0.25rem',
+                  marginLeft: 'calc(2em + (2 * var(--gap-sm, 0.5rem)))',
+                  minWidth: 0,
+                }}
+              >
+                <p
+                  className="text-[0.8em]"
+                  style={{
+                    color: awaitingAck ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {snoozeLabel}
+                </p>
+              </div>
+            )}
           </div>
 
           {isNoteVisible && (
