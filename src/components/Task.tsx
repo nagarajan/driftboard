@@ -169,6 +169,9 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               ),
           opacity: snoozed ? 0.45 : 1,
         }}
+        className={`min-w-0 overflow-visible rounded-lg border shadow-sm ${
+          awaitingAck ? 'task-ready-glow' : ''
+        }`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >

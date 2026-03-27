@@ -654,14 +654,15 @@ body {
   }
   50% {
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--accent-primary) 75%, transparent),
-      0 0 12px 2px color-mix(in srgb, var(--accent-primary) 55%, transparent),
-      0 0 22px 4px color-mix(in srgb, var(--accent-primary) 35%, transparent);
+      0 0 0 2px color-mix(in srgb, var(--accent-primary) 90%, transparent),
+      0 0 10px 3px color-mix(in srgb, var(--accent-primary) 75%, transparent),
+      0 0 22px 6px color-mix(in srgb, var(--accent-primary) 55%, transparent),
+      0 0 40px 10px color-mix(in srgb, var(--accent-primary) 30%, transparent);
   }
 }
 
 .task-ready-glow {
-  animation: task-ready-glow 1.8s ease-in-out infinite;
+  animation: task-ready-glow 1.6s ease-in-out infinite;
 }
 
 .note-surface {
