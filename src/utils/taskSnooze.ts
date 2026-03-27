@@ -47,6 +47,17 @@ export function getTomorrowMorningNine(baseMs: number = Date.now()): number {
   return nextMorning.getTime();
 }
 
+export function getNextWorkingDayMorningNine(baseMs: number = Date.now()): number {
+  const next = new Date(baseMs);
+  next.setDate(next.getDate() + 1);
+  next.setHours(9, 0, 0, 0);
+  // 0 = Sunday, 6 = Saturday
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.getTime();
+}
+
 export function formatSnoozeUntil(until: number, now: number = Date.now()): string {
   const target = new Date(until);
   const current = new Date(now);

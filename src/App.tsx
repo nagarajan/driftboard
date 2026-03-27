@@ -72,6 +72,10 @@ function App() {
     ['--swimlane-width-scale' as string]: swimlaneWidth / 100,
   };
 
+  useEffect(() => {
+    document.title = activeBoard ? `DriftBoard - ${activeBoard.name}` : 'DriftBoard';
+  }, [activeBoard?.name]);
+
   // Initialize auth listener on mount
   useEffect(() => {
     const unsubscribe = initializeAuthListener((user) => {

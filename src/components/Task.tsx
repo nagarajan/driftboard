@@ -15,6 +15,7 @@ import {
   addMinutes,
   formatSnoozeUntil,
   getTomorrowMorningNine,
+  getNextWorkingDayMorningNine,
   isTaskAwaitingAck,
   isTaskSnoozed,
 } from '../utils/taskSnooze';
@@ -33,6 +34,7 @@ const SNOOZE_PRESETS = [
   { label: '30 minutes', getUntil: () => addMinutes(Date.now(), 30) },
   { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },
   { label: 'Tomorrow 9am', getUntil: () => getTomorrowMorningNine() },
+  { label: 'Next working day 9am', getUntil: () => getNextWorkingDayMorningNine() },
 ];
 
 export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
