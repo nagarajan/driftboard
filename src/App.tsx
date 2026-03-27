@@ -61,6 +61,10 @@ function App() {
   const activeBoardAckCount = activeBoard
     ? getAwaitingAckCount(activeBoard, swimlanes, tasks)
     : 0;
+  const totalAckCount = Object.values(boards).reduce(
+    (sum, board) => sum + getAwaitingAckCount(board, swimlanes, tasks),
+    0
+  );
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -139,9 +143,26 @@ function App() {
                   backgroundColor: 'var(--accent-primary)',
                   color: '#ffffff',
                 }}
-                title={`${activeBoardAckCount} task${activeBoardAckCount === 1 ? '' : 's'} ready to acknowledge`}
+                title={`${activeBoardAckCount} task${activeBoardAckCount === 1 ? '' : 's'} ready to acknowledge in this board`}
               >
                 {activeBoardAckCount}
+              </div>
+            )}
+            {totalAckCount > 0 && (
+              <div
+                className="badge-glow flex items-center justify-center rounded-full font-bold"
+                style={{
+                  minWidth: '1.6em',
+                  height: '1.6em',
+                  padding: '0 0.4em',
+                  fontSize: '0.8em',
+                  backgroundColor: 'var(--accent-success)',
+                  color: '#ffffff',
+                  opacity: 0.9,
+                }}
+                title={`${totalAckCount} task${totalAckCount === 1 ? '' : 's'} ready to acknowledge across all boards`}
+              >
+                {totalAckCount}
               </div>
             )}
           </div>
