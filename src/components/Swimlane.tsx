@@ -10,6 +10,53 @@ import { SwimlaneMenu } from './SwimlaneMenu';
 import { useBoardStore } from '../store/boardStore';
 import { isTaskSnoozed } from '../utils/taskSnooze';
 
+function AddTaskWidget({
+  value,
+  onChange,
+  onAdd,
+  onClose,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onAdd: (keepOpen: boolean) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onAdd(true);
+          if (e.key === 'Escape') onClose();
+        }}
+        onBlur={() => { if (!value.trim()) onClose(); }}
+        placeholder="Task title..."
+        className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+        autoFocus
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={() => onAdd(false)}
+          className="flex-1 text-white py-2 rounded transition-all duration-150 hover:brightness-110 hover:shadow-md active:scale-[0.97] active:brightness-90 active:shadow-none"
+          style={{ backgroundColor: 'var(--accent-primary)' }}
+        >
+          Add Task
+        </button>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded border transition-all duration-150 hover:brightness-95 hover:shadow-sm active:scale-[0.97] active:brightness-90"
+          style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-hover)', borderColor: 'var(--border-default)' }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface SwimlaneProps {
   swimlane: SwimlaneType;
   tasks: TaskType[];
@@ -19,8 +66,12 @@ interface SwimlaneProps {
 
 export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: SwimlaneProps) {
   const { renameSwimlane, addTask } = useBoardStore();
-  const [isAddingTask, setIsAddingTask] = useState(false);
+  const [addTaskPosition, setAddTaskPosition] = useState<'top' | 'bottom' | null>(null);
+  const isAddingTask = addTaskPosition !== null;
   const [newTaskTitle, setNewTaskTitle] = useState('');
+
+  const openAddTask = (position: 'top' | 'bottom') => setAddTaskPosition(position);
+  const closeAddTask = () => { setAddTaskPosition(null); setNewTaskTitle(''); };
   const firstSnoozedTaskIndex = tasks.findIndex((task) => isTaskSnoozed(task));
 
   const {
@@ -54,10 +105,10 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
 
   const handleAddTask = (keepOpen: boolean = false) => {
     if (newTaskTitle.trim()) {
-      addTask(swimlane.id, newTaskTitle.trim());
+      addTask(swimlane.id, newTaskTitle.trim(), addTaskPosition ?? 'bottom');
       setNewTaskTitle('');
       if (!keepOpen) {
-        setIsAddingTask(false);
+        closeAddTask();
       }
     }
   };
@@ -95,6 +146,18 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
           {tasks.length}
         </span>
 
+        <button
+          onClick={() => openAddTask('top')}
+          className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
+          style={{ color: 'var(--text-muted)', width: '1.75em', height: '1.75em' }}
+          title="Add task"
+          aria-label="Add task"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+
         <SwimlaneMenu swimlaneId={swimlane.id} currentBoardId={boardId} />
       </div>
 
@@ -104,6 +167,14 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
         className="flex flex-col"
         style={{ padding: 'var(--padding-section, 0.75rem)', gap: 'var(--gap-md, 0.75rem)', backgroundColor: isOver ? 'var(--bg-active)' : 'transparent' }}
       >
+        {/* Add task widget - shown at top when triggered from header + button */}
+        {addTaskPosition === 'top' && <AddTaskWidget
+          value={newTaskTitle}
+          onChange={setNewTaskTitle}
+          onAdd={handleAddTask}
+          onClose={closeAddTask}
+        />}
+
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task, index) => (
             <div key={task.id} className="contents">
@@ -137,55 +208,18 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
         )}
       </div>
 
-      {/* Add task area */}
+      {/* Bottom add task area */}
       <div style={{ padding: '0 var(--padding-section, 0.75rem) var(--padding-section, 0.75rem)' }}>
-        {isAddingTask ? (
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={newTaskTitle}
-              onChange={(e) => setNewTaskTitle(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddTask(true);
-                if (e.key === 'Escape') {
-                  setIsAddingTask(false);
-                  setNewTaskTitle('');
-                }
-              }}
-              onBlur={() => {
-                if (!newTaskTitle.trim()) {
-                  setIsAddingTask(false);
-                  setNewTaskTitle('');
-                }
-              }}
-              placeholder="Task title..."
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleAddTask(false)}
-                className="flex-1 text-white py-2 rounded transition-all duration-150 hover:brightness-110 hover:shadow-md active:scale-[0.97] active:brightness-90 active:shadow-none"
-                style={{ backgroundColor: 'var(--accent-primary)' }}
-              >
-                Add Task
-              </button>
-              <button
-                onClick={() => {
-                  setIsAddingTask(false);
-                  setNewTaskTitle('');
-                }}
-                className="px-4 py-2 rounded border transition-all duration-150 hover:brightness-95 hover:shadow-sm active:scale-[0.97] active:brightness-90"
-                style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-hover)', borderColor: 'var(--border-default)' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
+        {addTaskPosition === 'bottom' ? (
+          <AddTaskWidget
+            value={newTaskTitle}
+            onChange={setNewTaskTitle}
+            onAdd={handleAddTask}
+            onClose={closeAddTask}
+          />
+        ) : addTaskPosition === null && (
           <button
-            onClick={() => setIsAddingTask(true)}
+            onClick={() => openAddTask('bottom')}
             className="w-full flex items-center justify-center gap-2 py-2 rounded transition-all duration-150 hover:opacity-70 hover:bg-[var(--bg-hover)] active:scale-[0.98] active:opacity-50"
             style={{ color: 'var(--text-secondary)' }}
           >

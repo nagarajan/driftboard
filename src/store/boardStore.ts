@@ -68,7 +68,7 @@ interface BoardStore extends AppState {
   reorderSwimlanes: (boardId: string, swimlaneIds: string[], options?: HistoryOptions) => void;
 
   // Task actions
-  addTask: (swimlaneId: string, title: string) => void;
+  addTask: (swimlaneId: string, title: string, position?: 'top' | 'bottom') => void;
   renameTask: (taskId: string, title: string) => void;
   setTaskPriority: (taskId: string, priority: Priority) => void;
   setTaskNote: (taskId: string, note: string) => void;
@@ -588,7 +588,7 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       // Task actions
-      addTask: (swimlaneId: string, title: string) => {
+      addTask: (swimlaneId: string, title: string, position: 'top' | 'bottom' = 'top') => {
         const task: Task = {
           id: uuidv4(),
           title,
@@ -607,7 +607,9 @@ export const useBoardStore = create<BoardStore>()(
               [swimlaneId]: {
                 ...state.swimlanes[swimlaneId],
                 taskIds: sortTaskIdsByPriority(
-                  [...state.swimlanes[swimlaneId].taskIds, task.id],
+                  position === 'top'
+                    ? [task.id, ...state.swimlanes[swimlaneId].taskIds]
+                    : [...state.swimlanes[swimlaneId].taskIds, task.id],
                   nextTasks
                 ),
               },
