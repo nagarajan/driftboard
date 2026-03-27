@@ -31,13 +31,23 @@ const themeClasses: Record<string, string> = {
   lavender: 'theme-lavender',
   mint: 'theme-mint',
   peach: 'theme-peach',
+  sky: 'theme-sky',
+  lemon: 'theme-lemon',
+  lilac: 'theme-lilac',
+  coral: 'theme-coral',
+  sage: 'theme-sage',
   // Saturated themes
   ocean: 'theme-ocean',
   forest: 'theme-forest',
   sunset: 'theme-sunset',
   grape: 'theme-grape',
-  // Dark theme
+  // Dark themes
   dark: 'theme-dark',
+  midnight: 'theme-midnight',
+  charcoal: 'theme-charcoal',
+  crimson: 'theme-crimson',
+  slate: 'theme-slate',
+  amber: 'theme-amber',
 };
 
 const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';

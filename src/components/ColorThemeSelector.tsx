@@ -16,13 +16,23 @@ const themeOptions: ThemeOption[] = [
   { value: 'lavender', label: 'Lavender', colors: ['#ede9fe', '#8b5cf6', '#ddd6fe'], category: 'pastel' },
   { value: 'mint', label: 'Mint', colors: ['#d1fae5', '#10b981', '#a7f3d0'], category: 'pastel' },
   { value: 'peach', label: 'Peach', colors: ['#ffedd5', '#f97316', '#fed7aa'], category: 'pastel' },
+  { value: 'sky', label: 'Sky', colors: ['#e0f2fe', '#0ea5e9', '#bae6fd'], category: 'pastel' },
+  { value: 'lemon', label: 'Lemon', colors: ['#fefce8', '#ca8a04', '#fef08a'], category: 'pastel' },
+  { value: 'lilac', label: 'Lilac', colors: ['#fdf4ff', '#c026d3', '#fae8ff'], category: 'pastel' },
+  { value: 'coral', label: 'Coral', colors: ['#fff1f2', '#f43f5e', '#fecdd3'], category: 'pastel' },
+  { value: 'sage', label: 'Sage', colors: ['#f1f5eb', '#4d7c0f', '#d9e8c0'], category: 'pastel' },
   // Saturated themes
   { value: 'ocean', label: 'Ocean', colors: ['#0c4a6e', '#0284c7', '#075985'], category: 'saturated' },
   { value: 'forest', label: 'Forest', colors: ['#14532d', '#16a34a', '#166534'], category: 'saturated' },
   { value: 'sunset', label: 'Sunset', colors: ['#7c2d12', '#ea580c', '#9a3412'], category: 'saturated' },
   { value: 'grape', label: 'Grape', colors: ['#4c1d95', '#7c3aed', '#5b21b6'], category: 'saturated' },
-  // Dark theme
+  // Dark themes
   { value: 'dark', label: 'Dark', colors: ['#111827', '#1f2937', '#374151'], category: 'dark' },
+  { value: 'midnight', label: 'Midnight', colors: ['#060910', '#0f1a2e', '#111e33'], category: 'dark' },
+  { value: 'charcoal', label: 'Charcoal', colors: ['#100e0d', '#221f1d', '#1e1b19'], category: 'dark' },
+  { value: 'crimson', label: 'Crimson', colors: ['#0f0205', '#7f1d1d', '#1f050d'], category: 'dark' },
+  { value: 'slate', label: 'Slate', colors: ['#0d1117', '#161b22', '#1c2230'], category: 'dark' },
+  { value: 'amber', label: 'Amber', colors: ['#120d02', '#78350f', '#221808'], category: 'dark' },
 ];
 
 export function ColorThemeSelector() {
@@ -184,8 +194,14 @@ export function ColorThemeSelector() {
             ))}
           </div>
 
-          {/* Dark theme */}
+          {/* Dark themes */}
           <div style={{ padding: '0.5em' }}>
+            <p
+              className="font-semibold uppercase"
+              style={{ color: 'var(--text-muted)', fontSize: '0.7em', padding: '0.25em 0.5em' }}
+            >
+              Dark
+            </p>
             {darkThemes.map((option) => (
               <button
                 key={option.value}

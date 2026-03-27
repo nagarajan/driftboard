@@ -41,10 +41,20 @@ export type Theme =
   | 'lavender'
   | 'mint'
   | 'peach'
+  | 'sky'
+  | 'lemon'
+  | 'lilac'
+  | 'coral'
+  | 'sage'
   | 'ocean'
   | 'forest'
   | 'sunset'
-  | 'grape';
+  | 'grape'
+  | 'midnight'
+  | 'charcoal'
+  | 'crimson'
+  | 'slate'
+  | 'amber';
 
 /** Default / fallback theme (new boards, missing theme, UI when no board selected). */
 export const DEFAULT_BOARD_THEME: Theme = 'ocean';
