@@ -134,7 +134,7 @@ function App() {
       <header style={{ padding: '0.8em 1.5em', backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center" style={{ gap: '1em' }}>
-            <h1 className="font-bold" style={{ fontSize: '1.5em', color: 'var(--text-header)' }}>Task Board</h1>
+            <h1 className="font-bold" style={{ fontSize: '1.5em', color: 'var(--text-header)' }}>Drift Board</h1>
             <BoardSwitcher />
             {activeBoardAckCount > 0 && (
               <div

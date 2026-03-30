@@ -73,6 +73,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
     },
   });
 
+
   const sortedSubtasks = sortSubtasksByPriority(task.subtasks);
   const subtaskIds = sortedSubtasks.map((st) => `subtask-${st.id}`);
 
