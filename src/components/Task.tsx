@@ -54,8 +54,8 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
   const [showSnoozeDialog, setShowSnoozeDialog] = useState(false);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [isHovered, setIsHovered] = useState(false);
   const [isNoteVisible, setIsNoteVisible] = useState(false);
+  const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(true);
 
   const {
     attributes,
@@ -76,6 +76,8 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
 
   const sortedSubtasks = sortSubtasksByPriority(task.subtasks);
   const subtaskIds = sortedSubtasks.map((st) => `subtask-${st.id}`);
+  const completedSubtaskCount = task.subtasks.filter((st) => st.completed).length;
+  const totalSubtaskCount = task.subtasks.length;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -165,8 +167,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
         className={`min-w-0 overflow-visible rounded-lg border shadow-sm ${
           awaitingAck ? 'task-ready-glow' : ''
         }`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
           <div
             className="min-w-0"
@@ -265,6 +265,25 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               </button>
 
               <button
+                onClick={() => {
+                  setIsAddingSubtask(true);
+                  setIsSubtasksExpanded(true);
+                }}
+                className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
+                style={{
+                  width: '1.75em',
+                  height: '1.75em',
+                  color: 'var(--text-muted)',
+                }}
+                title="Add subtask"
+                aria-label="Add subtask"
+              >
+                <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+
+              <button
                 onClick={handleDelete}
                 className="flex items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
                 title="Delete task"
@@ -348,21 +367,55 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
             </div>
           )}
 
-          {(task.subtasks.length > 0 || isAddingSubtask || isHovered) && (
+          {(totalSubtaskCount > 0 || isAddingSubtask) && (
             <div className="flex flex-col" style={{ padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)', gap: 'var(--gap-sm, 0.5rem)' }}>
-              {isTaskDragging ? (
-                sortedSubtasks.map((subtask) => (
-                  <Subtask key={subtask.id} subtask={subtask} taskId={task.id} disabled />
-                ))
-              ) : (
-                <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
-                  {sortedSubtasks.map((subtask) => (
-                    <Subtask key={subtask.id} subtask={subtask} taskId={task.id} />
-                  ))}
-                </SortableContext>
+              {totalSubtaskCount > 0 && (
+                <button
+                  onClick={() => setIsSubtasksExpanded((e) => !e)}
+                  className="flex items-center gap-1 rounded py-0.5 text-[0.8em] transition-colors hover:bg-[var(--bg-hover)]"
+                  style={{ color: 'var(--text-muted)', marginLeft: '0.25rem', alignSelf: 'flex-start' }}
+                  title={isSubtasksExpanded ? 'Collapse subtasks' : 'Expand subtasks'}
+                >
+                  <svg
+                    style={{
+                      width: '0.85em',
+                      height: '0.85em',
+                      flexShrink: 0,
+                      transition: 'transform 150ms',
+                      transform: isSubtasksExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                    }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  {totalSubtaskCount} subtask{totalSubtaskCount !== 1 ? 's' : ''}
+                  {completedSubtaskCount > 0 && (
+                    <span style={{ color: 'var(--accent-success)' }}>
+                      ({completedSubtaskCount} done)
+                    </span>
+                  )}
+                </button>
               )}
 
-              {isAddingSubtask ? (
+              {isSubtasksExpanded && (
+                <>
+                  {isTaskDragging ? (
+                    sortedSubtasks.map((subtask) => (
+                      <Subtask key={subtask.id} subtask={subtask} taskId={task.id} disabled />
+                    ))
+                  ) : (
+                    <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
+                      {sortedSubtasks.map((subtask) => (
+                        <Subtask key={subtask.id} subtask={subtask} taskId={task.id} />
+                      ))}
+                    </SortableContext>
+                  )}
+                </>
+              )}
+
+              {isAddingSubtask && (
                 <div style={{ marginLeft: '0.375rem', display: 'flex', alignItems: 'center', gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
                   <input
                     type="text"
@@ -408,19 +461,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                     </svg>
                   </button>
                 </div>
-              ) : (
-                isHovered && (
-                  <button
-                    onClick={() => setIsAddingSubtask(true)}
-                    className="flex items-center gap-1 rounded py-1 text-[0.9em] transition-all duration-150 hover:opacity-70 active:scale-[0.98] active:opacity-50"
-                    style={{ color: 'var(--text-secondary)', marginLeft: '0.375rem' }}
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Add subtask
-                  </button>
-                )
               )}
             </div>
           )}
