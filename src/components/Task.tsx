@@ -156,6 +156,9 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
     <>
       <div
         ref={setNodeRef}
+        className={`min-w-0 overflow-visible rounded-lg shadow-sm ${
+          awaitingAck ? 'task-ready-glow' : ''
+        }`}
         style={{
           ...style,
           backgroundColor: 'var(--bg-card)',
@@ -165,16 +168,19 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 task.priority,
                 task.completed ? 'var(--border-completed)' : 'var(--border-card)'
               ),
+          borderStyle: 'solid',
+          borderWidth: task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
           opacity: snoozed ? 0.45 : 1,
         }}
-        className={`min-w-0 overflow-visible rounded-lg border shadow-sm ${
-          awaitingAck ? 'task-ready-glow' : ''
-        }`}
       >
           <div
             className="min-w-0"
             style={{
-              padding: 'var(--padding-card-sm, 0.25rem) var(--padding-card, 0.75rem)',
+              padding: task.priority !== 'none' || awaitingAck
+                ? 'calc(var(--padding-card-sm, 0.25rem) - 2px) calc(var(--padding-card, 0.75rem) - 2px)'
+                : task.completed
+                  ? 'calc(var(--padding-card-sm, 0.25rem) - 1px) calc(var(--padding-card, 0.75rem) - 1px)'
+                  : 'var(--padding-card-sm, 0.25rem) var(--padding-card, 0.75rem)',
             }}
           >
             <div
@@ -336,7 +342,11 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
           {isNoteVisible && (
             <div
               style={{
-                padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)',
+                padding: task.priority !== 'none' || awaitingAck
+                  ? '0 calc(var(--padding-card, 0.75rem) - 2px) calc(var(--gap-sm, 0.5rem) - 2px)'
+                  : task.completed
+                    ? '0 calc(var(--padding-card, 0.75rem) - 1px) calc(var(--gap-sm, 0.5rem) - 1px)'
+                    : '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)',
               }}
             >
               <div
@@ -380,7 +390,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
           )}
 
           {(totalSubtaskCount > 0 || isAddingSubtask) && (
-            <div className="flex flex-col" style={{ padding: '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)', gap: 'var(--gap-sm, 0.5rem)' }}>
+            <div className="flex flex-col" style={{ padding: task.priority !== 'none' || awaitingAck ? '0 calc(var(--padding-card, 0.75rem) - 2px) calc(var(--gap-sm, 0.5rem) - 2px)' : task.completed ? '0 calc(var(--padding-card, 0.75rem) - 1px) calc(var(--gap-sm, 0.5rem) - 1px)' : '0 var(--padding-card, 0.75rem) var(--gap-sm, 0.5rem)', gap: 'var(--gap-sm, 0.5rem)' }}>
               {totalSubtaskCount > 0 && (
                 <button
                   onClick={() => setIsSubtasksExpanded((e) => !e)}

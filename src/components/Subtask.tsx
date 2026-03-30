@@ -196,10 +196,11 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const hasPriority = subtask.priority !== 'none';
   return (
     <div
       ref={setNodeRef}
-      className="rounded border min-w-0 overflow-visible"
+      className="rounded min-w-0 overflow-visible"
       style={{
         ...style,
         backgroundColor: 'var(--bg-subtask)',
@@ -207,13 +208,19 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
           subtask.priority,
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'
         ),
+        borderStyle: 'solid',
+        borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
       }}
     >
       <div
         className="min-w-0"
         style={{
-          padding: 'var(--gap-sm, 0.5rem)',
+          padding: hasPriority
+            ? 'calc(var(--gap-sm, 0.5rem) - 2px)'
+            : subtask.completed
+              ? 'calc(var(--gap-sm, 0.5rem) - 1px)'
+              : 'var(--gap-sm, 0.5rem)',
         }}
       >
         <SubtaskContent
@@ -239,6 +246,7 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
 }
 
 function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: string }) {
+  const hasPriority = subtask.priority !== 'none';
   return (
     <div
       style={{
@@ -247,14 +255,20 @@ function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: stri
           subtask.priority,
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'
         ),
+        borderStyle: 'solid',
+        borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
       }}
-      className="rounded border min-w-0 overflow-visible"
+      className="rounded min-w-0 overflow-visible"
     >
       <div
         className="min-w-0"
         style={{
-          padding: 'var(--gap-sm, 0.5rem)',
+          padding: hasPriority
+            ? 'calc(var(--gap-sm, 0.5rem) - 2px)'
+            : subtask.completed
+              ? 'calc(var(--gap-sm, 0.5rem) - 1px)'
+              : 'var(--gap-sm, 0.5rem)',
         }}
       >
         <SubtaskContent
