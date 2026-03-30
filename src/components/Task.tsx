@@ -55,7 +55,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isNoteVisible, setIsNoteVisible] = useState(false);
-  const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(true);
+  const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
 
   const {
     attributes,
