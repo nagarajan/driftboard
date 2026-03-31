@@ -607,7 +607,12 @@ body {
   --border-priority-low: #fde68a;
 }
 
-.theme-ocean,
+.theme-ocean {
+  --border-priority-high: #e07a7a;
+  --border-priority-medium: #d4a96a;
+  --border-priority-low: #a3c47a;
+}
+
 .theme-forest,
 .theme-sunset,
 .theme-grape,

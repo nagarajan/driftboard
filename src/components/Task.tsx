@@ -103,16 +103,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
       highlighted: snoozed || awaitingAck,
       tone: awaitingAck ? 'success' as const : 'warning' as const,
       children: [
-        ...(snoozed
-          ? [
-              {
-                label: 'Cancel snooze',
-                onSelect: () => cancelTaskSnooze(task.id),
-                highlighted: true,
-                tone: 'warning' as const,
-              },
-            ]
-          : []),
         ...SNOOZE_PRESETS.map((preset) => ({
           label: preset.label,
           onSelect: () => snoozeTask(task.id, preset.getUntil()),
@@ -240,6 +230,24 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
             </div>
 
             <div className="flex items-center flex-shrink-0" style={{ gap: '0.1em' }}>
+              {snoozed && (
+                <button
+                  onClick={() => cancelTaskSnooze(task.id)}
+                  className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
+                  style={{
+                    width: '1.75em',
+                    height: '1.75em',
+                    color: 'var(--accent-primary)',
+                  }}
+                  title="Cancel snooze"
+                  aria-label="Cancel snooze"
+                >
+                  <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2m6-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
               {awaitingAck && (
                 <button
                   onClick={() => acknowledgeTask(task.id)}
