@@ -69,7 +69,9 @@ function App() {
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [readyPopupOpen, setReadyPopupOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const appStyle: CSSProperties = {
     ['--swimlane-width-scale' as string]: swimlaneWidth / 100,
   };
@@ -77,6 +79,11 @@ function App() {
   useEffect(() => {
     document.title = activeBoard ? `DriftBoard - ${activeBoard.name}` : 'DriftBoard';
   }, [activeBoard?.name]);
+
+  // Clear search when switching boards
+  useEffect(() => {
+    setSearchQuery('');
+  }, [activeBoardId]);
 
   // Initialize auth listener on mount
   useEffect(() => {
@@ -177,6 +184,68 @@ function App() {
             )}
           </div>
 
+          {/* Search */}
+          <div className="flex items-center relative" style={{ marginLeft: 'auto', marginRight: '0.75em' }}>
+            <svg
+              style={{
+                position: 'absolute',
+                left: '0.5em',
+                width: '0.95em',
+                height: '0.95em',
+                color: searchQuery ? 'var(--text-header)' : 'rgba(255,255,255,0.5)',
+                pointerEvents: 'none',
+              }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+            </svg>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery(''); }}
+              placeholder="Search tasks..."
+              aria-label="Search tasks"
+              style={{
+                paddingLeft: '1.75em',
+                paddingRight: searchQuery ? '1.75em' : '0.65em',
+                paddingTop: '0.3em',
+                paddingBottom: '0.3em',
+                fontSize: '0.85em',
+                borderRadius: '0.4em',
+                border: '1px solid rgba(255,255,255,0.25)',
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                color: 'var(--text-header)',
+                outline: 'none',
+                width: '11em',
+                transition: 'width 0.15s, background-color 0.15s',
+              }}
+              onFocus={(e) => { e.currentTarget.style.width = '16em'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'; }}
+              onBlur={(e) => { e.currentTarget.style.width = searchQuery ? '16em' : '11em'; e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.12)'; }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }}
+                style={{
+                  position: 'absolute',
+                  right: '0.4em',
+                  color: 'rgba(255,255,255,0.6)',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <svg style={{ width: '0.85em', height: '0.85em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -231,7 +300,7 @@ function App() {
       {/* Main content */}
       <main className="flex-1 flex overflow-hidden">
         {activeBoard ? (
-          <Board board={activeBoard} />
+          <Board board={activeBoard} searchQuery={searchQuery} />
         ) : (
           <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-secondary)' }}>
             <div className="text-center">

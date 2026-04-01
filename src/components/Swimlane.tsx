@@ -62,9 +62,10 @@ interface SwimlaneProps {
   tasks: TaskType[];
   boardId: string;
   isTaskDragging?: boolean;
+  searchQuery?: string;
 }
 
-export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: SwimlaneProps) {
+export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, searchQuery = '' }: SwimlaneProps) {
   const { renameSwimlane, addTask } = useBoardStore();
   const [addTaskPosition, setAddTaskPosition] = useState<'top' | 'bottom' | null>(null);
   const isAddingTask = addTaskPosition !== null;
@@ -198,7 +199,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false }: S
                   />
                 </div>
               )}
-              <Task task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} />
+              <Task task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} searchQuery={searchQuery} />
             </div>
           ))}
         </SortableContext>

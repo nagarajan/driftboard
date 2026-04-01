@@ -114,3 +114,18 @@ export function toDateTimeLocalValue(timestamp: number): string {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * MINUTE_MS);
   return localDate.toISOString().slice(0, 16);
 }
+
+export interface SnoozePreset {
+  label: string;
+  getUntil: () => number;
+}
+
+export const SNOOZE_PRESETS: SnoozePreset[] = [
+  { label: '10 seconds', getUntil: () => Date.now() + 10_000 },
+  { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
+  { label: '30 minutes', getUntil: () => addMinutes(Date.now(), 30) },
+  { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },
+  { label: '4 hours', getUntil: () => addHours(Date.now(), 4) },
+  { label: 'Tomorrow 9am', getUntil: () => getTomorrowMorningNine() },
+  { label: 'Next working day 9am', getUntil: () => getNextWorkingDayMorningNine() },
+];

@@ -11,6 +11,7 @@ interface SubtaskProps {
   subtask: SubtaskType;
   taskId: string;
   disabled?: boolean;
+  searchQuery?: string;
 }
 
 function SubtaskContent({
@@ -173,7 +174,7 @@ function SubtaskContent({
   );
 }
 
-function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: string }) {
+function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: SubtaskType; taskId: string; searchQuery?: string }) {
   const {
     attributes,
     listeners,
@@ -190,10 +191,15 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
     },
   });
 
+  const needle = searchQuery.toLowerCase();
+  const matches = needle ? subtask.title.toLowerCase().includes(needle) : true;
+  const isSearchActive = needle.length > 0;
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.5 : isSearchActive && !matches ? 0.3 : 1,
+    filter: isSearchActive && !matches ? 'grayscale(0.85)' : 'none',
   };
 
   const hasPriority = subtask.priority !== 'none';
@@ -211,6 +217,7 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
         borderStyle: 'solid',
         borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
+        transition: 'opacity 0.15s, filter 0.15s',
       }}
     >
       <div
@@ -245,7 +252,11 @@ function SortableSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: st
   );
 }
 
-function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: string }) {
+function StaticSubtask({ subtask, taskId, searchQuery = '' }: { subtask: SubtaskType; taskId: string; searchQuery?: string }) {
+  const needle = searchQuery.toLowerCase();
+  const matches = needle ? subtask.title.toLowerCase().includes(needle) : true;
+  const isSearchActive = needle.length > 0;
+
   const hasPriority = subtask.priority !== 'none';
   return (
     <div
@@ -258,6 +269,9 @@ function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: stri
         borderStyle: 'solid',
         borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
+        opacity: isSearchActive && !matches ? 0.3 : 1,
+        filter: isSearchActive && !matches ? 'grayscale(0.85)' : 'none',
+        transition: 'opacity 0.15s, filter 0.15s',
       }}
       className="rounded min-w-0 overflow-visible"
     >
@@ -290,9 +304,9 @@ function StaticSubtask({ subtask, taskId }: { subtask: SubtaskType; taskId: stri
   );
 }
 
-export function Subtask({ subtask, taskId, disabled = false }: SubtaskProps) {
+export function Subtask({ subtask, taskId, disabled = false, searchQuery = '' }: SubtaskProps) {
   if (disabled) {
-    return <StaticSubtask subtask={subtask} taskId={taskId} />;
+    return <StaticSubtask subtask={subtask} taskId={taskId} searchQuery={searchQuery} />;
   }
-  return <SortableSubtask subtask={subtask} taskId={taskId} />;
+  return <SortableSubtask subtask={subtask} taskId={taskId} searchQuery={searchQuery} />;
 }

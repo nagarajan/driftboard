@@ -11,33 +11,20 @@ import { SnoozeDialog } from './SnoozeDialog';
 import { useBoardStore } from '../store/boardStore';
 import { getPriorityBorderColor, sortSubtasksByPriority } from '../utils/priority';
 import {
-  addHours,
-  addMinutes,
   formatSnoozeUntil,
-  getTomorrowMorningNine,
-  getNextWorkingDayMorningNine,
   isTaskAwaitingAck,
   isTaskSnoozed,
+  SNOOZE_PRESETS,
 } from '../utils/taskSnooze';
 
 interface TaskProps {
   task: TaskType;
   swimlaneId: string;
   isTaskDragging?: boolean;
+  searchQuery?: string;
 }
 
-const SNOOZE_PRESETS = [
-  { label: '1 minute', getUntil: () => addMinutes(Date.now(), 1) },
-  { label: '5 minutes', getUntil: () => addMinutes(Date.now(), 5) },
-  { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
-  { label: '15 minutes', getUntil: () => addMinutes(Date.now(), 15) },
-  { label: '30 minutes', getUntil: () => addMinutes(Date.now(), 30) },
-  { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },
-  { label: 'Tomorrow 9am', getUntil: () => getTomorrowMorningNine() },
-  { label: 'Next working day 9am', getUntil: () => getNextWorkingDayMorningNine() },
-];
-
-export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
+export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '' }: TaskProps) {
   const {
     renameTask,
     setTaskPriority,
@@ -88,6 +75,12 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
   const noteButtonLabel = isNoteVisible ? 'Hide note' : 'Show note';
   const awaitingAck = isTaskAwaitingAck(task);
   const snoozed = isTaskSnoozed(task);
+
+  const needle = searchQuery.toLowerCase();
+  const taskTitleMatches = needle ? task.title.toLowerCase().includes(needle) : true;
+  const anySubtaskMatches = needle ? task.subtasks.some((st) => st.title.toLowerCase().includes(needle)) : true;
+  const taskMatches = taskTitleMatches || anySubtaskMatches;
+  const isSearchActive = needle.length > 0;
   const snoozeLabel = awaitingAck
     ? 'Ready - click the bell to acknowledge'
     : task.snooze
@@ -160,7 +153,9 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
               ),
           borderStyle: 'solid',
           borderWidth: task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
-          opacity: snoozed ? 0.45 : 1,
+          opacity: snoozed ? 0.45 : isSearchActive && !taskMatches ? 0.3 : 1,
+          filter: isSearchActive && !taskMatches ? 'grayscale(0.85)' : 'none',
+          transition: 'opacity 0.15s, filter 0.15s',
         }}
       >
           <div
@@ -433,12 +428,12 @@ export function Task({ task, swimlaneId, isTaskDragging = false }: TaskProps) {
                 <>
                   {isTaskDragging ? (
                     sortedSubtasks.map((subtask) => (
-                      <Subtask key={subtask.id} subtask={subtask} taskId={task.id} disabled />
+                      <Subtask key={subtask.id} subtask={subtask} taskId={task.id} disabled searchQuery={searchQuery} />
                     ))
                   ) : (
                     <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
                       {sortedSubtasks.map((subtask) => (
-                        <Subtask key={subtask.id} subtask={subtask} taskId={task.id} />
+                        <Subtask key={subtask.id} subtask={subtask} taskId={task.id} searchQuery={searchQuery} />
                       ))}
                     </SortableContext>
                   )}

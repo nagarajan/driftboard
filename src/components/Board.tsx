@@ -53,9 +53,10 @@ const swimlaneGapClasses = {
 
 interface BoardProps {
   board: BoardType;
+  searchQuery?: string;
 }
 
-export function Board({ board }: BoardProps) {
+export function Board({ board, searchQuery = '' }: BoardProps) {
   const {
     swimlanes,
     tasks,
@@ -385,6 +386,7 @@ export function Board({ board }: BoardProps) {
                   tasks={swimlaneTasks}
                   boardId={board.id}
                   isTaskDragging={activeType === 'task'}
+                  searchQuery={searchQuery}
                 />
               );
             })}
