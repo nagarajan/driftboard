@@ -16,6 +16,7 @@ import { ColorThemeSelector } from './components/ColorThemeSelector';
 import { ImportExportButtons } from './components/ImportExportButtons';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
 import { ToastContainer } from './components/ToastContainer';
+import { ReadyTasksPopup } from './components/ReadyTasksPopup';
 import { getAwaitingAckCount } from './utils/taskSnooze';
 
 const scaleClasses = {
@@ -67,6 +68,7 @@ function App() {
   );
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [readyPopupOpen, setReadyPopupOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const appStyle: CSSProperties = {
     ['--swimlane-width-scale' as string]: swimlaneWidth / 100,
@@ -137,8 +139,9 @@ function App() {
             <h1 className="font-bold" style={{ fontSize: '1.5em', color: 'var(--text-header)' }}>Drift Board</h1>
             <BoardSwitcher />
             {activeBoardAckCount > 0 && (
-              <div
-                className="badge-glow flex items-center justify-center rounded-full font-bold"
+              <button
+                onClick={() => setReadyPopupOpen(true)}
+                className="badge-glow flex items-center justify-center rounded-full font-bold transition-opacity hover:opacity-80"
                 style={{
                   minWidth: '1.6em',
                   height: '1.6em',
@@ -146,15 +149,17 @@ function App() {
                   fontSize: '0.8em',
                   backgroundColor: 'var(--accent-primary)',
                   color: '#ffffff',
+                  cursor: 'pointer',
                 }}
-                title={`${activeBoardAckCount} task${activeBoardAckCount === 1 ? '' : 's'} ready to acknowledge in this board`}
+                title={`${activeBoardAckCount} task${activeBoardAckCount === 1 ? '' : 's'} ready to acknowledge in this board - click to review`}
               >
                 {activeBoardAckCount}
-              </div>
+              </button>
             )}
-            {totalAckCount > 0 && (
-              <div
-                className="badge-glow flex items-center justify-center rounded-full font-bold"
+            {totalAckCount > activeBoardAckCount && (
+              <button
+                onClick={() => setReadyPopupOpen(true)}
+                className="badge-glow flex items-center justify-center rounded-full font-bold transition-opacity hover:opacity-80"
                 style={{
                   minWidth: '1.6em',
                   height: '1.6em',
@@ -163,11 +168,12 @@ function App() {
                   backgroundColor: 'var(--accent-success)',
                   color: '#ffffff',
                   opacity: 0.9,
+                  cursor: 'pointer',
                 }}
-                title={`${totalAckCount} task${totalAckCount === 1 ? '' : 's'} ready to acknowledge across all boards`}
+                title={`${totalAckCount} task${totalAckCount === 1 ? '' : 's'} ready to acknowledge across all boards - click to review`}
               >
                 {totalAckCount}
-              </div>
+              </button>
             )}
           </div>
 
@@ -250,6 +256,9 @@ function App() {
         )}
       </main>
       <ToastContainer />
+      {readyPopupOpen && (
+        <ReadyTasksPopup onClose={() => setReadyPopupOpen(false)} />
+      )}
     </div>
   );
 }
