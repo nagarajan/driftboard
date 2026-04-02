@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -24,6 +24,8 @@ interface TaskProps {
   searchQuery?: string;
 }
 
+const DONE_MOVE_DELAY_MS = 1500;
+
 export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '' }: TaskProps) {
   const {
     renameTask,
@@ -36,6 +38,9 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
     snoozeTask,
     cancelTaskSnooze,
     acknowledgeTask,
+    moveTask,
+    boards,
+    swimlanes,
   } = useBoardStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSnoozeDialog, setShowSnoozeDialog] = useState(false);
@@ -43,6 +48,63 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isNoteVisible, setIsNoteVisible] = useState(false);
   const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
+  // pendingComplete: true while the 3-second countdown is running after checking the box
+  const [pendingComplete, setPendingComplete] = useState(false);
+  const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancel the pending timer when the task is unmounted
+  useEffect(() => {
+    return () => {
+      if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
+    };
+  }, []);
+
+  const findDoneSwimlaneId = (): string | null => {
+    // Find the board this task's swimlane belongs to
+    const boardEntry = Object.values(boards).find((b) =>
+      b.swimlaneIds.includes(swimlaneId)
+    );
+    if (!boardEntry) return null;
+    // Find a swimlane named "done" (case-insensitive) in that board
+    for (const slId of boardEntry.swimlaneIds) {
+      const sl = swimlanes[slId];
+      if (sl && sl.title.trim().toLowerCase() === 'done') return slId;
+    }
+    return null;
+  };
+
+  const handleToggleComplete = () => {
+    if (task.completed) {
+      // Already complete: if timer running, cancel it and revert
+      if (completeTimerRef.current) {
+        clearTimeout(completeTimerRef.current);
+        completeTimerRef.current = null;
+        setPendingComplete(false);
+        toggleTaskComplete(task.id); // revert to incomplete
+      } else {
+        // Normally unchecking a completed task (already moved, or done swimlane)
+        toggleTaskComplete(task.id);
+      }
+      return;
+    }
+
+    // Mark complete immediately
+    toggleTaskComplete(task.id);
+    setPendingComplete(true);
+
+    completeTimerRef.current = setTimeout(() => {
+      completeTimerRef.current = null;
+      setPendingComplete(false);
+      const doneSwimlaneId = findDoneSwimlaneId();
+      if (doneSwimlaneId && doneSwimlaneId !== swimlaneId) {
+        // Move to top of the dedicated Done swimlane
+        moveTask(task.id, swimlaneId, doneSwimlaneId, 0);
+      } else {
+        // No Done swimlane — move to the bottom of the current swimlane
+        moveTask(task.id, swimlaneId, swimlaneId);
+      }
+    }, DONE_MOVE_DELAY_MS);
+  };
 
   const {
     attributes,
@@ -139,7 +201,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
     <>
       <div
         ref={setNodeRef}
-        className={`min-w-0 overflow-visible rounded-lg shadow-sm ${
+        className={`relative min-w-0 overflow-visible rounded-lg shadow-sm ${
           awaitingAck ? 'task-ready-glow' : ''
         }`}
         style={{
@@ -158,6 +220,23 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
           transition: 'opacity 0.15s, filter 0.15s',
         }}
       >
+          {/* Progress bar: animates left-to-right over 3s after task is checked complete */}
+          {pendingComplete && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                height: '3px',
+                borderRadius: '9999px 9999px 0 0',
+                backgroundColor: 'var(--accent-success)',
+                pointerEvents: 'none',
+                zIndex: 10,
+              }}
+              className="task-complete-progress-bar"
+            />
+          )}
           <div
             className="min-w-0"
             style={{
@@ -189,7 +268,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
             </button>
 
             <button
-              onClick={() => toggleTaskComplete(task.id)}
+              onClick={handleToggleComplete}
               className="rounded border flex-shrink-0"
               style={{
                 width: '1em',

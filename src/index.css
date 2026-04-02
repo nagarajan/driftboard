@@ -687,6 +687,15 @@ body {
   animation: badge-glow 1.6s ease-in-out infinite;
 }
 
+@keyframes task-complete-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+.task-complete-progress-bar {
+  animation: task-complete-progress 1.5s linear forwards;
+}
+
 .note-surface {
   background-color: var(--bg-note);
   border-color: var(--border-note);
