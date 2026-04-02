@@ -74,6 +74,8 @@ interface BoardStore extends AppState {
   setTaskNote: (taskId: string, note: string) => void;
   deleteTaskNote: (taskId: string) => void;
   deleteTask: (taskId: string) => void;
+  clearSwimlane: (swimlaneId: string) => void;
+  clearCompletedTasks: (swimlaneId: string) => void;
   toggleTaskComplete: (taskId: string) => void;
   snoozeTask: (taskId: string, until: number) => void;
   cancelTaskSnooze: (taskId: string) => void;
@@ -755,6 +757,76 @@ export const useBoardStore = create<BoardStore>()(
         });
         if (removedTitle) {
           showToast(`Task "${removedTitle}" deleted`, 'delete');
+        }
+      },
+
+      clearSwimlane: (swimlaneId: string) => {
+        let swimlaneTitle = '';
+        let taskCount = 0;
+        set((state) => {
+          const swimlane = state.swimlanes[swimlaneId];
+          if (!swimlane || swimlane.taskIds.length === 0) return state;
+          swimlaneTitle = swimlane.title;
+          taskCount = swimlane.taskIds.length;
+
+          const h = mergeHistory(state, `Clear all tasks in "${swimlane.title}"`);
+
+          const newTasks = { ...state.tasks };
+          swimlane.taskIds.forEach((taskId) => {
+            delete newTasks[taskId];
+          });
+
+          return {
+            tasks: newTasks,
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: { ...swimlane, taskIds: [] },
+            },
+            ...h,
+          };
+        });
+        if (swimlaneTitle && taskCount > 0) {
+          showToast(
+            `Cleared ${taskCount} task${taskCount === 1 ? '' : 's'} from "${swimlaneTitle}"`,
+            'delete'
+          );
+        }
+      },
+
+      clearCompletedTasks: (swimlaneId: string) => {
+        let swimlaneTitle = '';
+        let removedCount = 0;
+        set((state) => {
+          const swimlane = state.swimlanes[swimlaneId];
+          if (!swimlane) return state;
+          swimlaneTitle = swimlane.title;
+
+          const completedIds = swimlane.taskIds.filter((id) => state.tasks[id]?.completed);
+          if (completedIds.length === 0) return state;
+          removedCount = completedIds.length;
+
+          const h = mergeHistory(state, `Clear completed tasks in "${swimlane.title}"`);
+
+          const newTasks = { ...state.tasks };
+          completedIds.forEach((id) => { delete newTasks[id]; });
+
+          return {
+            tasks: newTasks,
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: {
+                ...swimlane,
+                taskIds: swimlane.taskIds.filter((id) => !completedIds.includes(id)),
+              },
+            },
+            ...h,
+          };
+        });
+        if (swimlaneTitle && removedCount > 0) {
+          showToast(
+            `Cleared ${removedCount} completed task${removedCount === 1 ? '' : 's'} from "${swimlaneTitle}"`,
+            'delete'
+          );
         }
       },
 

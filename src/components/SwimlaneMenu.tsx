@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useBoardStore } from '../store/boardStore';
 import { getOrderedBoardIds } from '../utils/boardOrder';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SwimlaneMenuProps {
   swimlaneId: string;
@@ -10,10 +11,16 @@ interface SwimlaneMenuProps {
 export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showClearCompletedConfirm, setShowClearCompletedConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { boards, boardOrderIds, moveSwimlaneToBoard, deleteSwimlane, addSwimlane } =
+  const { boards, boardOrderIds, moveSwimlaneToBoard, deleteSwimlane, addSwimlane, clearSwimlane, clearCompletedTasks, swimlanes, tasks } =
     useBoardStore();
+
+  const swimlane = swimlanes[swimlaneId];
+  const taskCount = swimlane?.taskIds.length ?? 0;
+  const completedCount = swimlane?.taskIds.filter((id) => tasks[id]?.completed).length ?? 0;
 
   const otherBoards = getOrderedBoardIds(boards, boardOrderIds)
     .map((id) => boards[id])
@@ -39,6 +46,18 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
 
   const handleDelete = () => {
     deleteSwimlane(swimlaneId);
+    setIsOpen(false);
+  };
+
+  const handleClearConfirm = () => {
+    clearSwimlane(swimlaneId);
+    setShowClearConfirm(false);
+    setIsOpen(false);
+  };
+
+  const handleClearCompletedConfirm = () => {
+    clearCompletedTasks(swimlaneId);
+    setShowClearCompletedConfirm(false);
     setIsOpen(false);
   };
 
@@ -106,6 +125,24 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
           <hr className="my-1" style={{ borderColor: 'var(--border-default)' }} />
 
           <button
+            onClick={() => { setShowClearCompletedConfirm(true); setIsOpen(false); }}
+            disabled={completedCount === 0}
+            className="w-full px-4 py-2 text-left text-[0.9em] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ color: 'var(--accent-danger)' }}
+          >
+            Clear completed
+          </button>
+
+          <button
+            onClick={() => { setShowClearConfirm(true); setIsOpen(false); }}
+            disabled={taskCount === 0}
+            className="w-full px-4 py-2 text-left text-[0.9em] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ color: 'var(--accent-danger)' }}
+          >
+            Clear all tasks
+          </button>
+
+          <button
             onClick={handleDelete}
             className="w-full px-4 py-2 text-left text-[0.9em] transition-colors hover:bg-[var(--bg-hover)]"
             style={{ color: 'var(--accent-danger)' }}
@@ -114,6 +151,22 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showClearCompletedConfirm}
+        title="Clear completed tasks"
+        message={`Remove ${completedCount} completed task${completedCount === 1 ? '' : 's'} from "${swimlane?.title ?? ''}"? This can be undone.`}
+        onConfirm={handleClearCompletedConfirm}
+        onCancel={() => setShowClearCompletedConfirm(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        title="Clear all tasks"
+        message={`Remove all ${taskCount} task${taskCount === 1 ? '' : 's'} from "${swimlane?.title ?? ''}"? This can be undone.`}
+        onConfirm={handleClearConfirm}
+        onCancel={() => setShowClearConfirm(false)}
+      />
     </div>
   );
 }
