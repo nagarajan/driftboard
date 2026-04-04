@@ -3,10 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme, Priority } from '../types';
+import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme, Priority, Workspace } from '../types';
 import { DEFAULT_BOARD_THEME } from '../types';
 import { sanitizeEmail } from './authStore';
-import { getFirstBoardId, getOrderedBoardIds, reorderIds } from '../utils/boardOrder';
+import { getFirstBoardId, getOrderedBoardIds, getOrderedBoardIdsForWorkspace, getOrderedWorkspaceIds, reorderIds } from '../utils/boardOrder';
 import {
   PRIORITY_LABELS,
   normalizeTask,
@@ -35,7 +35,7 @@ export type { HistoryEntry } from '../utils/boardHistory';
 export type HistoryOptions = { skipHistory?: boolean };
 
 export interface ExportData {
-  /** v5+ includes per-board theme, task/subtask priority, and task snooze state. */
+  /** v5+ includes per-board theme, task/subtask priority, and task snooze state. v6+ includes workspaces. */
   version: number;
   exportedAt: string;
   boards: Record<string, Board>;
@@ -43,6 +43,9 @@ export interface ExportData {
   tasks: Record<string, Task>;
   /** Present in v2+ exports; ordered board ids (empty means sort by createdAt). */
   boardOrderIds?: string[];
+  /** Present in v6+ exports. */
+  workspaces?: Record<string, Workspace>;
+  workspaceOrderIds?: string[];
 }
 
 interface BoardStore extends AppState {
@@ -53,8 +56,16 @@ interface BoardStore extends AppState {
   undo: () => void;
   redo: () => void;
 
+  // Workspace actions
+  addWorkspace: (name: string) => string;
+  renameWorkspace: (workspaceId: string, name: string) => void;
+  deleteWorkspace: (workspaceId: string) => void;
+  reorderWorkspacesByDrag: (activeId: string, overId: string, options?: HistoryOptions) => void;
+  reorderBoardsInWorkspaceByDrag: (workspaceId: string, activeId: string, overId: string, options?: HistoryOptions) => void;
+  moveBoardToWorkspace: (boardId: string, workspaceId: string | null) => void;
+
   // Board actions
-  addBoard: (name: string, silent?: boolean) => void;
+  addBoard: (name: string, silent?: boolean, workspaceId?: string | null) => void;
   renameBoard: (boardId: string, name: string) => void;
   deleteBoard: (boardId: string) => void;
   setActiveBoard: (boardId: string) => void;
@@ -200,6 +211,8 @@ const firestorePayload = (state: AppState) => ({
   swimlanes: stripUndefinedFields(state.swimlanes),
   tasks: stripUndefinedFields(state.tasks),
   boardOrderIds: stripUndefinedFields(state.boardOrderIds),
+  workspaces: stripUndefinedFields(state.workspaces),
+  workspaceOrderIds: stripUndefinedFields(state.workspaceOrderIds),
   updatedAt: Date.now(),
 });
 
@@ -208,6 +221,8 @@ const getComparableSyncData = (state: {
   swimlanes: Record<string, Swimlane>;
   tasks: Record<string, Task>;
   boardOrderIds: string[];
+  workspaces?: Record<string, Workspace>;
+  workspaceOrderIds?: string[];
 }) => {
   const comparableTasks = normalizeTasksRecord(stripUndefinedFields(state.tasks));
   const comparableSwimlanes = sortSwimlanesTaskIdsByPriority(
@@ -216,12 +231,16 @@ const getComparableSyncData = (state: {
   );
   const comparableBoards = stripUndefinedFields(state.boards);
   const comparableBoardOrderIds = stripUndefinedFields(state.boardOrderIds);
+  const comparableWorkspaces = stripUndefinedFields(state.workspaces ?? {});
+  const comparableWorkspaceOrderIds = stripUndefinedFields(state.workspaceOrderIds ?? []);
 
   return {
     boards: JSON.stringify(comparableBoards),
     swimlanes: JSON.stringify(comparableSwimlanes),
     tasks: JSON.stringify(comparableTasks),
     boardOrderIds: JSON.stringify(comparableBoardOrderIds),
+    workspaces: JSON.stringify(comparableWorkspaces),
+    workspaceOrderIds: JSON.stringify(comparableWorkspaceOrderIds),
   };
 };
 
@@ -308,6 +327,9 @@ export const useBoardStore = create<BoardStore>()(
       boardOrderIds: [] as string[],
       activeBoardId: null,
       fontSize: 'md' as FontSize,
+      workspaces: {} as Record<string, Workspace>,
+      workspaceOrderIds: [] as string[],
+      activeWorkspaceId: null,
       _isRemoteUpdate: false,
       historyPast: [] as HistoryEntry[],
       historyFuture: [] as HistoryEntry[],
@@ -356,11 +378,199 @@ export const useBoardStore = create<BoardStore>()(
         showToast(`Redid: ${next.label}`, 'edit');
       },
 
+      // Workspace actions
+      addWorkspace: (name: string): string => {
+        const workspaceId = uuidv4();
+        const workspace: Workspace = {
+          id: workspaceId,
+          name,
+          boardOrderIds: [],
+          createdAt: Date.now(),
+        };
+        set((state) => {
+          const workspaceOrderIds =
+            state.workspaceOrderIds.length > 0
+              ? [...state.workspaceOrderIds, workspaceId]
+              : [workspaceId];
+          const h = mergeHistory(state, `Add workspace "${name}"`);
+          return {
+            workspaces: { ...state.workspaces, [workspaceId]: workspace },
+            workspaceOrderIds,
+            ...h,
+          };
+        });
+        showToast(`Workspace "${name}" added`, 'add');
+        return workspaceId;
+      },
+
+      renameWorkspace: (workspaceId: string, name: string) => {
+        set((state) => {
+          const ws = state.workspaces[workspaceId];
+          if (!ws) return state;
+          const h = mergeHistory(state, `Rename workspace to "${name}"`);
+          return {
+            workspaces: { ...state.workspaces, [workspaceId]: { ...ws, name } },
+            ...h,
+          };
+        });
+        showToast(`Workspace renamed to "${name}"`, 'edit');
+      },
+
+      deleteWorkspace: (workspaceId: string) => {
+        let deletedName = '';
+        set((state) => {
+          const ws = state.workspaces[workspaceId];
+          if (!ws) return state;
+          deletedName = ws.name;
+
+          // Move all boards in this workspace to top-level (no workspace)
+          const newBoards = { ...state.boards };
+          const movedBoardIds: string[] = [];
+          for (const board of Object.values(newBoards)) {
+            if (board.workspaceId === workspaceId) {
+              newBoards[board.id] = { ...board, workspaceId: null };
+              movedBoardIds.push(board.id);
+            }
+          }
+
+          // Append moved boards to top-level boardOrderIds
+          const currentTopOrder =
+            state.boardOrderIds.length > 0
+              ? state.boardOrderIds
+              : getOrderedBoardIds(
+                  Object.fromEntries(
+                    Object.entries(state.boards).filter(([, b]) => !b.workspaceId)
+                  ),
+                  []
+                );
+          const newBoardOrderIds = [
+            ...currentTopOrder.filter((id) => !movedBoardIds.includes(id)),
+            ...movedBoardIds,
+          ];
+
+          const newWorkspaces = { ...state.workspaces };
+          delete newWorkspaces[workspaceId];
+          const newWorkspaceOrderIds = state.workspaceOrderIds.filter((id) => id !== workspaceId);
+
+          const newActiveWorkspaceId =
+            state.activeWorkspaceId === workspaceId ? null : state.activeWorkspaceId;
+
+          const h = mergeHistory(state, `Delete workspace "${ws.name}"`);
+          return {
+            workspaces: newWorkspaces,
+            workspaceOrderIds: newWorkspaceOrderIds,
+            boards: newBoards,
+            boardOrderIds: newBoardOrderIds,
+            activeWorkspaceId: newActiveWorkspaceId,
+            ...h,
+          };
+        });
+        if (deletedName) {
+          showToast(`Workspace "${deletedName}" deleted (boards moved to top level)`, 'delete');
+        }
+      },
+
+      reorderWorkspacesByDrag: (activeId: string, overId: string, options?: HistoryOptions) => {
+        let changed = false;
+        set((state) => {
+          const ids = getOrderedWorkspaceIds(state.workspaces, state.workspaceOrderIds);
+          const oldIndex = ids.indexOf(activeId);
+          const newIndex = ids.indexOf(overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return {};
+          changed = true;
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder workspaces');
+          return { workspaceOrderIds: reorderIds(ids, oldIndex, newIndex), ...h };
+        });
+        if (changed) {
+          showToast('Workspace order updated', 'move');
+        }
+      },
+
+      reorderBoardsInWorkspaceByDrag: (
+        workspaceId: string,
+        activeId: string,
+        overId: string,
+        options?: HistoryOptions
+      ) => {
+        let changed = false;
+        set((state) => {
+          const ws = state.workspaces[workspaceId];
+          if (!ws) return {};
+          const ids = getOrderedBoardIdsForWorkspace(state.boards, ws);
+          const oldIndex = ids.indexOf(activeId);
+          const newIndex = ids.indexOf(overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return {};
+          changed = true;
+          const newOrder = reorderIds(ids, oldIndex, newIndex);
+          const h = options?.skipHistory ? {} : mergeHistory(state, 'Reorder boards');
+          return {
+            workspaces: {
+              ...state.workspaces,
+              [workspaceId]: { ...ws, boardOrderIds: newOrder },
+            },
+            ...h,
+          };
+        });
+        if (changed) {
+          showToast('Board order updated', 'move');
+        }
+      },
+
+      moveBoardToWorkspace: (boardId: string, workspaceId: string | null) => {
+        set((state) => {
+          const board = state.boards[boardId];
+          if (!board) return state;
+          const oldWorkspaceId = board.workspaceId ?? null;
+          if (oldWorkspaceId === workspaceId) return state;
+
+          const newBoards = {
+            ...state.boards,
+            [boardId]: { ...board, workspaceId },
+          };
+
+          // Remove from old workspace boardOrderIds
+          const newWorkspaces = { ...state.workspaces };
+          if (oldWorkspaceId && newWorkspaces[oldWorkspaceId]) {
+            newWorkspaces[oldWorkspaceId] = {
+              ...newWorkspaces[oldWorkspaceId],
+              boardOrderIds: newWorkspaces[oldWorkspaceId].boardOrderIds.filter(
+                (id) => id !== boardId
+              ),
+            };
+          }
+
+          // Add to new workspace boardOrderIds
+          if (workspaceId && newWorkspaces[workspaceId]) {
+            newWorkspaces[workspaceId] = {
+              ...newWorkspaces[workspaceId],
+              boardOrderIds: [...newWorkspaces[workspaceId].boardOrderIds, boardId],
+            };
+          }
+
+          // Update top-level boardOrderIds
+          let newBoardOrderIds = state.boardOrderIds;
+          if (!workspaceId && !newBoardOrderIds.includes(boardId)) {
+            newBoardOrderIds = [...newBoardOrderIds, boardId];
+          } else if (workspaceId) {
+            newBoardOrderIds = newBoardOrderIds.filter((id) => id !== boardId);
+          }
+
+          const h = mergeHistory(state, 'Move board to workspace');
+          return {
+            boards: newBoards,
+            workspaces: newWorkspaces,
+            boardOrderIds: newBoardOrderIds,
+            ...h,
+          };
+        });
+      },
+
       // Board actions
-      addBoard: (name: string, silent?: boolean) => {
+      addBoard: (name: string, silent?: boolean, workspaceId?: string | null) => {
         const { board, swimlanes } = createDefaultBoard();
         board.name = name;
         board.createdAt = Date.now();
+        board.workspaceId = workspaceId ?? null;
 
         set((state) => {
           const newSwimlanes = { ...state.swimlanes };
@@ -368,10 +578,26 @@ export const useBoardStore = create<BoardStore>()(
             newSwimlanes[sl.id] = sl;
           });
 
-          const boardOrderIds =
-            state.boardOrderIds.length > 0
-              ? [...state.boardOrderIds, board.id]
-              : state.boardOrderIds;
+          let boardOrderIds = state.boardOrderIds;
+          let newWorkspaces = state.workspaces;
+
+          if (workspaceId && state.workspaces[workspaceId]) {
+            // Add to workspace boardOrderIds
+            const ws = state.workspaces[workspaceId];
+            newWorkspaces = {
+              ...state.workspaces,
+              [workspaceId]: {
+                ...ws,
+                boardOrderIds: [...ws.boardOrderIds, board.id],
+              },
+            };
+          } else {
+            // Add to top-level boardOrderIds
+            boardOrderIds =
+              state.boardOrderIds.length > 0
+                ? [...state.boardOrderIds, board.id]
+                : state.boardOrderIds;
+          }
 
           const h = mergeHistory(state, `Add board "${name}"`);
 
@@ -379,6 +605,7 @@ export const useBoardStore = create<BoardStore>()(
             boards: { ...state.boards, [board.id]: board },
             swimlanes: newSwimlanes,
             boardOrderIds,
+            workspaces: newWorkspaces,
             activeBoardId: state.activeBoardId || board.id,
             ...h,
           };
@@ -427,6 +654,16 @@ export const useBoardStore = create<BoardStore>()(
 
           const newBoardOrderIds = state.boardOrderIds.filter((id) => id !== boardId);
 
+          // Remove from workspace boardOrderIds if applicable
+          const newWorkspaces = { ...state.workspaces };
+          if (board.workspaceId && newWorkspaces[board.workspaceId]) {
+            const ws = newWorkspaces[board.workspaceId];
+            newWorkspaces[board.workspaceId] = {
+              ...ws,
+              boardOrderIds: ws.boardOrderIds.filter((id) => id !== boardId),
+            };
+          }
+
           const newActiveBoardId =
             state.activeBoardId === boardId
               ? getFirstBoardId(newBoards, newBoardOrderIds)
@@ -439,6 +676,7 @@ export const useBoardStore = create<BoardStore>()(
             swimlanes: newSwimlanes,
             tasks: newTasks,
             boardOrderIds: newBoardOrderIds,
+            workspaces: newWorkspaces,
             activeBoardId: newActiveBoardId,
             ...h,
           };
@@ -1400,12 +1638,14 @@ export const useBoardStore = create<BoardStore>()(
       getExportData: (): ExportData => {
         const state = get();
         return {
-          version: 5,
+          version: 6,
           exportedAt: new Date().toISOString(),
           boards: state.boards,
           swimlanes: state.swimlanes,
           tasks: state.tasks,
           boardOrderIds: state.boardOrderIds,
+          workspaces: state.workspaces,
+          workspaceOrderIds: state.workspaceOrderIds,
         };
       },
 
@@ -1419,7 +1659,11 @@ export const useBoardStore = create<BoardStore>()(
         const newBoards: Record<string, Board> = { ...state.boards };
         const newSwimlanes: Record<string, Swimlane> = { ...state.swimlanes };
         const newTasks: Record<string, Task> = { ...state.tasks };
-        const importedOrderIds: string[] = [];
+        // Map from imported workspace id -> new workspace id
+        const workspaceIdMap: Record<string, string> = {};
+        const newWorkspaces: Record<string, Workspace> = { ...state.workspaces };
+        const importedWorkspaceOrderIds: string[] = [];
+        const importedTopLevelOrderIds: string[] = [];
         let importCreatedAt = Date.now();
 
         const getUniqueBoardName = (originalName: string): string => {
@@ -1439,9 +1683,28 @@ export const useBoardStore = create<BoardStore>()(
           return newName;
         };
 
+        // Import workspaces first (if present in v6+ data)
+        if (data.workspaces) {
+          const orderedWsIds = data.workspaceOrderIds?.length
+            ? data.workspaceOrderIds
+            : Object.keys(data.workspaces);
+          for (const oldWsId of orderedWsIds) {
+            const importedWs = data.workspaces[oldWsId];
+            if (!importedWs) continue;
+            const newWsId = uuidv4();
+            workspaceIdMap[oldWsId] = newWsId;
+            newWorkspaces[newWsId] = {
+              ...importedWs,
+              id: newWsId,
+              boardOrderIds: [], // filled below
+              createdAt: importedWs.createdAt ?? importCreatedAt++,
+            };
+            importedWorkspaceOrderIds.push(newWsId);
+          }
+        }
+
         Object.values(data.boards).forEach((importedBoard) => {
           const newBoardId = uuidv4();
-          importedOrderIds.push(newBoardId);
 
           const originalName = importedBoard.name;
           const uniqueName = getUniqueBoardName(originalName);
@@ -1487,19 +1750,40 @@ export const useBoardStore = create<BoardStore>()(
             }
           });
 
+          // Resolve workspace membership
+          const oldWorkspaceId = importedBoard.workspaceId ?? null;
+          const newWorkspaceId = oldWorkspaceId
+            ? (workspaceIdMap[oldWorkspaceId] ?? null)
+            : null;
+
           newBoards[newBoardId] = {
             id: newBoardId,
             name: uniqueName,
             swimlaneIds: newSwimlaneIds,
             createdAt: importedBoard.createdAt ?? importCreatedAt++,
             theme: importedBoard.theme ?? DEFAULT_BOARD_THEME,
+            workspaceId: newWorkspaceId,
           };
+
+          if (newWorkspaceId && newWorkspaces[newWorkspaceId]) {
+            newWorkspaces[newWorkspaceId] = {
+              ...newWorkspaces[newWorkspaceId],
+              boardOrderIds: [...newWorkspaces[newWorkspaceId].boardOrderIds, newBoardId],
+            };
+          } else {
+            importedTopLevelOrderIds.push(newBoardId);
+          }
         });
 
         const nextBoardOrderIds =
           state.boardOrderIds.length > 0
-            ? [...state.boardOrderIds, ...importedOrderIds]
+            ? [...state.boardOrderIds, ...importedTopLevelOrderIds]
             : state.boardOrderIds;
+
+        const nextWorkspaceOrderIds =
+          state.workspaceOrderIds.length > 0
+            ? [...state.workspaceOrderIds, ...importedWorkspaceOrderIds]
+            : importedWorkspaceOrderIds;
 
         const h = mergeHistory(state, 'Import data');
 
@@ -1508,6 +1792,8 @@ export const useBoardStore = create<BoardStore>()(
           swimlanes: newSwimlanes,
           tasks: newTasks,
           boardOrderIds: nextBoardOrderIds,
+          workspaces: newWorkspaces,
+          workspaceOrderIds: nextWorkspaceOrderIds,
           ...h,
         });
 
@@ -1519,7 +1805,7 @@ export const useBoardStore = create<BoardStore>()(
     }),
     {
       name: 'kanban-board-storage',
-      version: 5,
+      version: 6,
       /** Persist data fields only; boardOrderIds must be included so board order survives refresh. */
       partialize: (state) => ({
         boards: state.boards,
@@ -1528,6 +1814,9 @@ export const useBoardStore = create<BoardStore>()(
         boardOrderIds: state.boardOrderIds,
         activeBoardId: state.activeBoardId,
         fontSize: state.fontSize,
+        workspaces: state.workspaces,
+        workspaceOrderIds: state.workspaceOrderIds,
+        activeWorkspaceId: state.activeWorkspaceId,
       }),
       migrate: (persistedState: unknown, version: number) => {
         let state = persistedState as Record<string, unknown>;
@@ -1581,6 +1870,16 @@ export const useBoardStore = create<BoardStore>()(
           );
           state = { ...s, tasks, swimlanes };
         }
+        if (version < 6) {
+          // Add workspaces fields if not present
+          const s = state as Record<string, unknown>;
+          state = {
+            ...s,
+            workspaces: (s.workspaces as Record<string, Workspace>) || {},
+            workspaceOrderIds: (s.workspaceOrderIds as string[]) || [],
+            activeWorkspaceId: (s.activeWorkspaceId as string | null) || null,
+          };
+        }
         return state;
       },
       onRehydrateStorage: () => (_state, error) => {
@@ -1611,6 +1910,8 @@ let prevTaskData: {
   swimlanes: string;
   tasks: string;
   boardOrderIds: string;
+  workspaces: string;
+  workspaceOrderIds: string;
 } | null = null;
 
 function stopFirestoreSync() {
@@ -1654,11 +1955,14 @@ function startFirestoreSync() {
         currentTaskData.boards !== prevTaskData.boards ||
         currentTaskData.swimlanes !== prevTaskData.swimlanes ||
         currentTaskData.tasks !== prevTaskData.tasks ||
-        currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds;
+        currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds ||
+        currentTaskData.workspaces !== prevTaskData.workspaces ||
+        currentTaskData.workspaceOrderIds !== prevTaskData.workspaceOrderIds;
 
       const boardOrderChanged =
         prevTaskData !== null &&
-        currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds;
+        (currentTaskData.boardOrderIds !== prevTaskData.boardOrderIds ||
+          currentTaskData.workspaceOrderIds !== prevTaskData.workspaceOrderIds);
       
       if (taskDataChanged) {
         prevTaskData = currentTaskData;
@@ -1669,6 +1973,9 @@ function startFirestoreSync() {
           boardOrderIds: state.boardOrderIds,
           activeBoardId: state.activeBoardId,
           fontSize: state.fontSize,
+          workspaces: state.workspaces,
+          workspaceOrderIds: state.workspaceOrderIds,
+          activeWorkspaceId: state.activeWorkspaceId,
         };
         if (boardOrderChanged) {
           saveToFirestoreImmediate(payload);
@@ -1716,23 +2023,35 @@ function startFirestoreSync() {
             swimlanes: remoteSwimlanes,
             tasks: remoteTasks,
             boardOrderIds: remoteOrderIds,
+            workspaces: stripUndefinedFields((data.workspaces || {}) as Record<string, Workspace>),
+            workspaceOrderIds: Array.isArray(data.workspaceOrderIds) ? data.workspaceOrderIds : [],
           });
           const currentComparable = getComparableSyncData(currentState);
           const hasChanges =
             remoteComparable.boards !== currentComparable.boards ||
             remoteComparable.swimlanes !== currentComparable.swimlanes ||
             remoteComparable.tasks !== currentComparable.tasks ||
-            remoteComparable.boardOrderIds !== currentComparable.boardOrderIds;
+            remoteComparable.boardOrderIds !== currentComparable.boardOrderIds ||
+            remoteComparable.workspaces !== currentComparable.workspaces ||
+            remoteComparable.workspaceOrderIds !== currentComparable.workspaceOrderIds;
 
           if (hasChanges) {
             console.log('Applying remote Firestore update');
             currentState._setIsRemoteUpdate(true);
+            const remoteWorkspaces = stripUndefinedFields(
+              (data.workspaces || {}) as Record<string, Workspace>
+            );
+            const remoteWorkspaceOrderIds = Array.isArray(data.workspaceOrderIds)
+              ? data.workspaceOrderIds
+              : [];
             // Only update task data, preserve local UI settings
             useBoardStore.setState({
               boards: remoteBoards,
               swimlanes: remoteSwimlanes,
               tasks: remoteTasks,
               boardOrderIds: remoteOrderIds,
+              workspaces: remoteWorkspaces,
+              workspaceOrderIds: remoteWorkspaceOrderIds,
               ...emptyHistoryState,
             });
             // Update activeBoardId if current one doesn't exist
@@ -1780,6 +2099,9 @@ export function initializeForUser(email: string | null) {
       tasks: {},
       boardOrderIds: [],
       activeBoardId: null,
+      workspaces: {},
+      workspaceOrderIds: [],
+      activeWorkspaceId: null,
       _isRemoteUpdate: false,
       ...emptyHistoryState,
     });

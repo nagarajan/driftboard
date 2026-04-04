@@ -67,14 +67,31 @@ export interface Board {
   createdAt?: number;
   /** Color theme for this board (synced with Firestore). */
   theme?: Theme;
+  /** Workspace this board belongs to (null = no workspace / uncategorized). */
+  workspaceId?: string | null;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  /** Ordered board ids within this workspace. */
+  boardOrderIds: string[];
+  /** UTC ms when the workspace was created. */
+  createdAt?: number;
 }
 
 export interface AppState {
   boards: Record<string, Board>;
   swimlanes: Record<string, Swimlane>;
   tasks: Record<string, Task>;
-  /** Ordered board ids; empty means sort by createdAt ascending. */
+  /** Top-level ordered board ids (boards with no workspace). */
   boardOrderIds: string[];
   activeBoardId: string | null;
   fontSize: FontSize;
+  /** All workspaces by id. */
+  workspaces: Record<string, Workspace>;
+  /** Ordered workspace ids. */
+  workspaceOrderIds: string[];
+  /** Currently active workspace id (null = no workspace filter). */
+  activeWorkspaceId: string | null;
 }
