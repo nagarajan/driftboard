@@ -138,7 +138,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${scaleClasses[fontSize]} ${getThemeClass(theme)}`} style={appStyle}>
+    <div id="app-root" className={`min-h-screen flex flex-col ${scaleClasses[fontSize]} ${getThemeClass(theme)}`} style={appStyle}>
       {/* Header */}
       <header style={{ padding: '0.8em 1.5em', backgroundColor: 'var(--bg-header)', borderBottom: '1px solid var(--border-default)' }}>
         <div className="flex items-center justify-between">

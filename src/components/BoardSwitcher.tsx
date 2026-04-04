@@ -195,35 +195,26 @@ interface MoveToPanelProps {
   workspaceOrderIds: string[];
   /** Bounding rect of the trigger button, used to position the portal panel */
   anchorRect: DOMRect;
+  /** Ref forwarded from BoardSwitcher so the outside-click guard can exclude this node */
+  panelRef: React.RefObject<HTMLDivElement | null>;
   onMove: (boardId: string, targetWorkspaceId: string | null) => void;
   onClose: () => void;
 }
 
-function MoveToPanel({ board, workspaces, workspaceOrderIds, anchorRect, onMove, onClose }: MoveToPanelProps) {
+function MoveToPanel({ board, workspaces, workspaceOrderIds, anchorRect, panelRef, onMove, onClose }: MoveToPanelProps) {
   const orderedWsIds = getOrderedWorkspaceIds(workspaces, workspaceOrderIds);
   const currentWsId = board.workspaceId ?? null;
-  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Position: align top with the button, open to the left of it.
-  // If too close to the left edge, open to the right instead.
+  // Position using viewport coords (fixed positioning — no scrollY offset needed).
+  // Open to the left of the button; fall back to right if too close to the left edge.
   const panelWidth = 180;
-  const spaceLeft = anchorRect.left;
-  const openLeft = spaceLeft >= panelWidth + 8;
+  const openLeft = anchorRect.left >= panelWidth + 8;
   const left = openLeft
     ? anchorRect.left - panelWidth - 4
     : anchorRect.right + 4;
-  const top = anchorRect.top + window.scrollY;
+  const top = anchorRect.top;
 
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  const portalTarget = document.getElementById('app-root') ?? document.body;
 
   return createPortal(
     <div
@@ -238,6 +229,7 @@ function MoveToPanel({ board, workspaces, workspaceOrderIds, anchorRect, onMove,
       }}
       onClick={(e) => e.stopPropagation()}
     >
+
       <div
         className="flex items-center justify-between px-3 py-1.5"
         style={{ borderBottom: '1px solid var(--border-default)' }}
@@ -306,7 +298,7 @@ function MoveToPanel({ board, workspaces, workspaceOrderIds, anchorRect, onMove,
         )}
       </div>
     </div>,
-    document.body
+    portalTarget
   );
 }
 
@@ -328,6 +320,8 @@ type BoardRowProps = {
   awaitingAckCount: number;
   /** True when the board is nested inside a workspace submenu */
   nested?: boolean;
+  /** Ref forwarded from BoardSwitcher for the portal outside-click guard */
+  moveToPortalRef: React.RefObject<HTMLDivElement | null>;
   onRowClick: () => void;
   onConfirmEdit: (name: string) => void;
   onDeleteBoard: (boardId: string) => void;
@@ -347,6 +341,7 @@ function BoardRow({
   workspaceOrderIds,
   awaitingAckCount,
   nested = false,
+  moveToPortalRef,
   onRowClick,
   onConfirmEdit,
   onDeleteBoard,
@@ -483,6 +478,7 @@ function BoardRow({
               workspaces={workspaces}
               workspaceOrderIds={workspaceOrderIds}
               anchorRect={moveAnchorRect}
+              panelRef={moveToPortalRef}
               onMove={onMoveBoardToWorkspace}
               onClose={() => setMovingBoardId(null)}
             />
@@ -552,6 +548,7 @@ type WorkspaceSectionProps = {
   onDeleteWorkspace: (workspaceId: string) => void;
   onReorderBoardsInWorkspace: (workspaceId: string, activeId: string, overId: string) => void;
   onAddBoardInWorkspace: (workspaceId: string, name: string) => void;
+  moveToPortalRef: React.RefObject<HTMLDivElement | null>;
 };
 
 function WorkspaceSection({
@@ -584,6 +581,7 @@ function WorkspaceSection({
   onDeleteWorkspace,
   onReorderBoardsInWorkspace,
   onAddBoardInWorkspace,
+  moveToPortalRef,
 }: WorkspaceSectionProps) {
   const isWsEditing = wsEditState?.id === workspace.id;
   const isWsDeleting = wsDeleteState === workspace.id;
@@ -771,6 +769,7 @@ function WorkspaceSection({
                       tasks as Record<string, Task>
                     )}
                     nested
+                    moveToPortalRef={moveToPortalRef}
                     onRowClick={() => onSelectBoard(board.id)}
                     onConfirmEdit={(name) => onRenameBoard(board.id, name)}
                     onDeleteBoard={onDeleteBoard}
@@ -848,6 +847,8 @@ export function BoardSwitcher() {
   const [wsDeleteState, setWsDeleteState] = useState<DeleteState>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
+  // Ref to the "Move to" portal panel — excluded from the dropdown outside-click guard
+  const moveToPortalRef = useRef<HTMLDivElement | null>(null);
 
   const {
     boards,
@@ -930,10 +931,12 @@ export function BoardSwitcher() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        resetTransientState();
-      }
+      const target = event.target as Node;
+      // Don't close if clicking inside the dropdown or inside the "Move to" portal panel
+      if (menuRef.current?.contains(target)) return;
+      if (moveToPortalRef.current?.contains(target)) return;
+      setIsOpen(false);
+      resetTransientState();
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -1044,6 +1047,7 @@ export function BoardSwitcher() {
                       onDeleteWorkspace={deleteWorkspace}
                       onReorderBoardsInWorkspace={reorderBoardsInWorkspaceByDrag}
                       onAddBoardInWorkspace={(wsId, name) => addBoard(name, false, wsId)}
+                      moveToPortalRef={moveToPortalRef}
                     />
                   ))}
                 </SortableContext>
@@ -1090,6 +1094,7 @@ export function BoardSwitcher() {
                           swimlanes as Record<string, Swimlane>,
                           tasks as Record<string, Task>
                         )}
+                        moveToPortalRef={moveToPortalRef}
                         onRowClick={() => handleSelectBoard(board.id)}
                         onConfirmEdit={(name) => renameBoard(board.id, name)}
                         onDeleteBoard={deleteBoard}
