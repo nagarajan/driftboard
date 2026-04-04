@@ -17,7 +17,14 @@ import { ImportExportButtons } from './components/ImportExportButtons';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
 import { ToastContainer } from './components/ToastContainer';
 import { ReadyTasksPopup } from './components/ReadyTasksPopup';
+import { NotificationFailureDialog } from './components/NotificationFailureDialog';
 import { getAwaitingAckCount } from './utils/taskSnooze';
+import {
+  isNotificationFailureSuppressed,
+  suppressNotificationFailureWarning,
+  getNotificationsEnabled,
+  setNotificationsEnabled,
+} from './utils/systemNotifications';
 
 const scaleClasses = {
   xs: 'scale-xs',
@@ -70,6 +77,8 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [readyPopupOpen, setReadyPopupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [notifFailureOpen, setNotifFailureOpen] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabledState] = useState(getNotificationsEnabled);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appStyle: CSSProperties = {
@@ -104,13 +113,23 @@ function App() {
   useUndoRedoKeyboard();
 
   useEffect(() => {
-    activateDueSnoozedTasks();
-    const intervalId = window.setInterval(() => {
-      activateDueSnoozedTasks();
-    }, 10000);
+    const checkAndNotify = () => {
+      const result = activateDueSnoozedTasks();
+      if (result === 'failed' && !isNotificationFailureSuppressed()) {
+        setNotifFailureOpen(true);
+      }
+    };
 
+    checkAndNotify();
+    const intervalId = window.setInterval(checkAndNotify, 10000);
     return () => window.clearInterval(intervalId);
   }, [activateDueSnoozedTasks]);
+
+  function handleToggleNotifications() {
+    const next = !notificationsEnabled;
+    setNotificationsEnabled(next);
+    setNotificationsEnabledState(next);
+  }
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -283,6 +302,40 @@ function App() {
                     <ColorThemeSelector />
                   </div>
                   <div>
+                    <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Notifications</p>
+                    <button
+                      onClick={handleToggleNotifications}
+                      className="flex items-center justify-between w-full rounded-md px-3 py-2 transition-colors hover:bg-[var(--bg-hover)]"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      <span className="text-[0.9em]">Notify on task ready</span>
+                      <span
+                        className="relative inline-flex items-center flex-shrink-0"
+                        style={{
+                          width: '2.2em',
+                          height: '1.2em',
+                          borderRadius: '9999px',
+                          backgroundColor: notificationsEnabled ? 'var(--accent-primary)' : 'var(--bg-hover)',
+                          border: '1px solid var(--border-default)',
+                          transition: 'background-color 0.2s',
+                        }}
+                      >
+                        <span
+                          style={{
+                            position: 'absolute',
+                            width: '0.9em',
+                            height: '0.9em',
+                            borderRadius: '50%',
+                            backgroundColor: '#fff',
+                            left: notificationsEnabled ? 'calc(100% - 1em)' : '0.1em',
+                            transition: 'left 0.2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                          }}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                  <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Data</p>
                     <ImportExportButtons />
                   </div>
@@ -328,6 +381,14 @@ function App() {
       {readyPopupOpen && (
         <ReadyTasksPopup onClose={() => setReadyPopupOpen(false)} />
       )}
+      <NotificationFailureDialog
+        isOpen={notifFailureOpen}
+        onDismiss={() => setNotifFailureOpen(false)}
+        onDontShowAgain={() => {
+          suppressNotificationFailureWarning();
+          setNotifFailureOpen(false);
+        }}
+      />
     </div>
   );
 }

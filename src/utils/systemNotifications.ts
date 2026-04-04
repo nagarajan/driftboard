@@ -1,3 +1,48 @@
+const NOTIF_FAILURE_SUPPRESSED_KEY = 'driftboard-notif-failure-suppressed';
+const NOTIF_ENABLED_KEY = 'driftboard-notif-enabled';
+
+// ---------------------------------------------------------------------------
+// Notifications enabled setting
+// ---------------------------------------------------------------------------
+
+export function getNotificationsEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem(NOTIF_ENABLED_KEY);
+    // Default to true when the key has never been set
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export function setNotificationsEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(NOTIF_ENABLED_KEY, String(enabled));
+  } catch {
+    // ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notification failure suppression
+// ---------------------------------------------------------------------------
+
+export function isNotificationFailureSuppressed(): boolean {
+  try {
+    return localStorage.getItem(NOTIF_FAILURE_SUPPRESSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function suppressNotificationFailureWarning(): void {
+  try {
+    localStorage.setItem(NOTIF_FAILURE_SUPPRESSED_KEY, 'true');
+  } catch {
+    // ignore
+  }
+}
+
 let pendingPermissionRequest: Promise<NotificationPermission | 'unsupported'> | null = null;
 
 function supportsSystemNotifications(): boolean {
@@ -43,6 +88,9 @@ export function notifyTaskUnsnoozed({
   swimlaneTitle,
   unsnoozedAt = Date.now(),
 }: TaskUnsnoozedNotificationOptions): boolean {
+  if (!getNotificationsEnabled()) {
+    return true; // user opted out - treat as silent success, not a failure
+  }
   if (!canSendSystemNotifications()) {
     return false;
   }

@@ -91,7 +91,7 @@ interface BoardStore extends AppState {
   snoozeTask: (taskId: string, until: number) => void;
   cancelTaskSnooze: (taskId: string) => void;
   acknowledgeTask: (taskId: string) => void;
-  activateDueSnoozedTasks: (now?: number) => void;
+  activateDueSnoozedTasks: (now?: number) => 'ok' | 'failed';
   moveTask: (
     taskId: string,
     fromSwimlaneId: string,
@@ -1314,10 +1314,12 @@ export const useBoardStore = create<BoardStore>()(
             activatedCount === 1 ? '1 snoozed task is ready' : `${activatedCount} snoozed tasks are ready`,
             'move'
           );
-          activatedTasks.forEach((task) => {
-            notifyTaskUnsnoozed(task);
-          });
+          const notifSent = activatedTasks.some((task) => notifyTaskUnsnoozed(task));
+          if (!notifSent) {
+            return 'failed';
+          }
         }
+        return 'ok';
       },
 
       moveTask: (
