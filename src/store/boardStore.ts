@@ -1942,6 +1942,11 @@ function startFirestoreSync() {
   
   console.log('Starting Firestore sync for user:', currentUserEmail);
   
+  // Seed prevTaskData with the current (empty) state so the first subscriber
+  // invocation sees no diff and does not push empty boards to Firestore before
+  // the initial onSnapshot arrives with the real data.
+  prevTaskData = getComparableSyncData(useBoardStore.getState());
+
   // Subscribe to local state changes and push to Firestore
   if (!unsubscribeFromStore) {
     unsubscribeFromStore = useBoardStore.subscribe((state) => {
