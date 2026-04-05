@@ -1890,6 +1890,12 @@ export const useBoardStore = create<BoardStore>()(
           return;
         }
         queueMicrotask(() => {
+          // Only create a default board for guests. If firestoreDoc is already
+          // set, auth has resolved and Firestore will populate the store - adding
+          // a board here would overwrite the user's real Firestore data.
+          if (firestoreDoc) {
+            return;
+          }
           const st = useBoardStore.getState();
           if (Object.keys(st.boards).length === 0) {
             st.addBoard('My Board', true);
@@ -2120,9 +2126,14 @@ export function initializeForUser(email: string | null) {
     currentUserEmail = null;
     firestoreDoc = null;
     
-    // Rehydrate from localStorage (Zustand persist handles this)
+    // Rehydrate from sessionStorage (Zustand persist handles this)
     // Just ensure we have a default board if empty
     setTimeout(() => {
+      // Guard: if auth resolved to a signed-in user in the meantime, skip -
+      // Firestore will populate the store instead.
+      if (firestoreDoc) {
+        return;
+      }
       const state = useBoardStore.getState();
       if (Object.keys(state.boards).length === 0) {
         state.addBoard('My Board', true);
@@ -2133,3 +2144,42 @@ export function initializeForUser(email: string | null) {
 
 // Default board is created in persist onRehydrateStorage after sessionStorage loads,
 // so we do not add a board before rehydration (which would race and lose boardOrderIds).
+
+/**
+ * Wipe all boards/tasks/swimlanes/workspaces from Firestore and reset the
+ * local store to a single fresh default board.  No-op for guests (no Firestore doc).
+ */
+export async function clearAllData(): Promise<void> {
+  if (!firestoreDoc) {
+    return;
+  }
+
+  const emptyState: AppState = {
+    boards: {},
+    swimlanes: {},
+    tasks: {},
+    boardOrderIds: [],
+    activeBoardId: null,
+    fontSize: 'md',
+    workspaces: {},
+    workspaceOrderIds: [],
+    activeWorkspaceId: null,
+  };
+
+  // Write empty payload to Firestore before resetting local state so that the
+  // block window covers the echo snapshot that will come back.
+  extendBlockPeriod(5000);
+  await setDoc(firestoreDoc, firestorePayload(emptyState));
+
+  // Reset local store and seed prevTaskData so the subscriber does not
+  // immediately push again.
+  useBoardStore.setState({
+    ...emptyState,
+    _isRemoteUpdate: false,
+    ...emptyHistoryState,
+  });
+  prevTaskData = getComparableSyncData(emptyState);
+
+  // Add a fresh default board (this will sync to Firestore via the subscriber).
+  useBoardStore.getState().addBoard('My Board', true);
+}

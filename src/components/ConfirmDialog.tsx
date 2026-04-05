@@ -2,6 +2,7 @@ interface ConfirmDialogProps {
   isOpen: boolean;
   title: string;
   message: string;
+  confirmLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -10,6 +11,7 @@ export function ConfirmDialog({
   isOpen,
   title,
   message,
+  confirmLabel = 'Delete',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -33,7 +35,7 @@ export function ConfirmDialog({
             className="px-4 py-2 text-white rounded-md transition-colors"
             style={{ backgroundColor: 'var(--accent-danger)' }}
           >
-            Delete
+            {confirmLabel}
           </button>
         </div>
       </div>

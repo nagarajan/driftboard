@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { useBoardStore, initializeForUser } from './store/boardStore';
+import { useBoardStore, initializeForUser, clearAllData } from './store/boardStore';
 import { useAuthStore, initializeAuthListener } from './store/authStore';
 import { useUIStore } from './store/uiStore';
 import { DEFAULT_BOARD_THEME } from './types';
@@ -18,6 +18,7 @@ import { GoogleAccountWidget } from './components/GoogleAccountWidget';
 import { ToastContainer } from './components/ToastContainer';
 import { ReadyTasksPopup } from './components/ReadyTasksPopup';
 import { NotificationFailureDialog } from './components/NotificationFailureDialog';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { getAwaitingAckCount } from './utils/taskSnooze';
 import {
   isNotificationFailureSuppressed,
@@ -63,7 +64,7 @@ const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 
 function App() {
   const { boards, activeBoardId, activateDueSnoozedTasks, swimlanes, tasks } = useBoardStore();
-  const { initialized } = useAuthStore();
+  const { initialized, user } = useAuthStore();
   const { fontSize, swimlaneWidth } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
   const activeBoardAckCount = activeBoard
@@ -79,6 +80,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [notifFailureOpen, setNotifFailureOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(getNotificationsEnabled);
+  const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appStyle: CSSProperties = {
@@ -124,6 +126,12 @@ function App() {
     const intervalId = window.setInterval(checkAndNotify, 10000);
     return () => window.clearInterval(intervalId);
   }, [activateDueSnoozedTasks]);
+
+  async function handleClearAllData() {
+    setClearDataConfirmOpen(false);
+    setMobileMenuOpen(false);
+    await clearAllData();
+  }
 
   function handleToggleNotifications() {
     const next = !notificationsEnabled;
@@ -338,6 +346,15 @@ function App() {
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Data</p>
                     <ImportExportButtons />
+                    {user && (
+                      <button
+                        onClick={() => setClearDataConfirmOpen(true)}
+                        className="flex items-center w-full rounded-md px-3 py-2 mt-1 transition-colors hover:bg-[var(--bg-hover)] text-[0.9em]"
+                        style={{ color: 'var(--accent-danger)' }}
+                      >
+                        Clear all data...
+                      </button>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Account</p>
@@ -388,6 +405,14 @@ function App() {
           suppressNotificationFailureWarning();
           setNotifFailureOpen(false);
         }}
+      />
+      <ConfirmDialog
+        isOpen={clearDataConfirmOpen}
+        title="Clear all data"
+        message="This will permanently delete all boards, swimlanes, tasks, and workspaces from Firebase. This cannot be undone. Are you sure?"
+        confirmLabel="Clear all data"
+        onConfirm={handleClearAllData}
+        onCancel={() => setClearDataConfirmOpen(false)}
       />
     </div>
   );
