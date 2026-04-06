@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, useCallback, type ReactNode } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Subtask as SubtaskType } from '../types';
@@ -18,17 +18,18 @@ function SubtaskContent({
   subtask,
   taskId,
   dragControl,
+  onDelete,
 }: {
   subtask: SubtaskType;
   taskId: string;
   dragControl: ReactNode;
+  onDelete: () => void;
 }) {
   const {
     renameSubtask,
     setSubtaskPriority,
     setSubtaskNote,
     deleteSubtaskNote,
-    deleteSubtask,
     toggleSubtaskComplete,
   } = useBoardStore();
   const [isNoteVisible, setIsNoteVisible] = useState(false);
@@ -107,7 +108,7 @@ function SubtaskContent({
           )}
 
           <button
-            onClick={() => deleteSubtask(taskId, subtask.id)}
+            onClick={onDelete}
             className="flex items-center justify-center rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-error,#b91c1c)]"
             title="Delete subtask"
           >
@@ -174,7 +175,37 @@ function SubtaskContent({
   );
 }
 
+function useDeleteAnimation(onConfirmedDelete: () => void) {
+  const collapseRef = useRef<HTMLDivElement>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const triggerDelete = useCallback(() => {
+    const el = collapseRef.current;
+    if (!el) {
+      onConfirmedDelete();
+      return;
+    }
+    setIsDeleting(true);
+    el.style.maxHeight = `${el.scrollHeight}px`;
+    el.style.overflow = 'hidden';
+    void el.offsetHeight;
+    el.style.transition = 'max-height 0.2s ease, opacity 0.16s ease, margin-bottom 0.2s ease';
+    el.style.maxHeight = '0';
+    el.style.opacity = '0';
+    el.style.marginBottom = '0';
+    const onEnd = () => {
+      el.removeEventListener('transitionend', onEnd);
+      onConfirmedDelete();
+    };
+    el.addEventListener('transitionend', onEnd);
+    setTimeout(onConfirmedDelete, 320);
+  }, [onConfirmedDelete]);
+
+  return { collapseRef, isDeleting, triggerDelete };
+}
+
 function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: SubtaskType; taskId: string; searchQuery?: string }) {
+  const { deleteSubtask } = useBoardStore();
   const {
     attributes,
     listeners,
@@ -191,11 +222,15 @@ function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subta
     },
   });
 
+  const { collapseRef, isDeleting, triggerDelete } = useDeleteAnimation(
+    useCallback(() => deleteSubtask(taskId, subtask.id), [deleteSubtask, taskId, subtask.id])
+  );
+
   const needle = searchQuery.toLowerCase();
   const matches = needle ? subtask.title.toLowerCase().includes(needle) : true;
   const isSearchActive = needle.length > 0;
 
-  const style = {
+  const dndStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : isSearchActive && !matches ? 0.3 : 1,
@@ -204,11 +239,12 @@ function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subta
 
   const hasPriority = subtask.priority !== 'none';
   return (
+    <div ref={collapseRef} style={isDeleting ? { pointerEvents: 'none' } : undefined}>
     <div
       ref={setNodeRef}
       className="rounded min-w-0 overflow-visible"
       style={{
-        ...style,
+        ...dndStyle,
         backgroundColor: 'var(--bg-subtask)',
         borderColor: getPriorityBorderColor(
           subtask.priority,
@@ -233,6 +269,7 @@ function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subta
         <SubtaskContent
           subtask={subtask}
           taskId={taskId}
+          onDelete={triggerDelete}
           dragControl={
             <button
               {...attributes}
@@ -249,16 +286,23 @@ function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subta
         />
       </div>
     </div>
+    </div>
   );
 }
 
 function StaticSubtask({ subtask, taskId, searchQuery = '' }: { subtask: SubtaskType; taskId: string; searchQuery?: string }) {
+  const { deleteSubtask } = useBoardStore();
+  const { collapseRef, isDeleting, triggerDelete } = useDeleteAnimation(
+    useCallback(() => deleteSubtask(taskId, subtask.id), [deleteSubtask, taskId, subtask.id])
+  );
+
   const needle = searchQuery.toLowerCase();
   const matches = needle ? subtask.title.toLowerCase().includes(needle) : true;
   const isSearchActive = needle.length > 0;
 
   const hasPriority = subtask.priority !== 'none';
   return (
+    <div ref={collapseRef} style={isDeleting ? { pointerEvents: 'none' } : undefined}>
     <div
       style={{
         backgroundColor: 'var(--bg-subtask)',
@@ -288,6 +332,7 @@ function StaticSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subtask
         <SubtaskContent
           subtask={subtask}
           taskId={taskId}
+          onDelete={triggerDelete}
           dragControl={
             <div
               className="flex-shrink-0"
@@ -300,6 +345,7 @@ function StaticSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subtask
           }
         />
       </div>
+    </div>
     </div>
   );
 }

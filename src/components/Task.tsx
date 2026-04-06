@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -50,7 +50,9 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
   const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
   // pendingComplete: true while the 3-second countdown is running after checking the box
   const [pendingComplete, setPendingComplete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const collapseRef = useRef<HTMLDivElement>(null);
 
   // Cancel the pending timer when the task is unmounted
   useEffect(() => {
@@ -174,17 +176,43 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
     },
   ];
 
+  const animateThenDelete = useCallback((doDelete: () => void) => {
+    const el = collapseRef.current;
+    if (!el) {
+      doDelete();
+      return;
+    }
+    // Lock current height so the collapse transition has somewhere to animate from
+    el.style.maxHeight = `${el.scrollHeight}px`;
+    el.style.overflow = 'hidden';
+    // Force reflow so the browser registers the starting height before we change it
+    void el.offsetHeight;
+    el.style.transition = 'max-height 0.22s ease, opacity 0.18s ease, margin-bottom 0.22s ease';
+    el.style.maxHeight = '0';
+    el.style.opacity = '0';
+    el.style.marginBottom = '0';
+    const onEnd = () => {
+      el.removeEventListener('transitionend', onEnd);
+      doDelete();
+    };
+    el.addEventListener('transitionend', onEnd);
+    // Fallback in case transitionend never fires (e.g. hidden tab)
+    setTimeout(doDelete, 350);
+  }, []);
+
   const handleDelete = () => {
     if (task.subtasks.length > 0) {
       setShowDeleteConfirm(true);
     } else {
-      deleteTask(task.id);
+      setIsDeleting(true);
+      animateThenDelete(() => deleteTask(task.id));
     }
   };
 
   const confirmDelete = () => {
-    deleteTask(task.id);
     setShowDeleteConfirm(false);
+    setIsDeleting(true);
+    animateThenDelete(() => deleteTask(task.id));
   };
 
   const handleAddSubtask = (keepOpen: boolean = false) => {
@@ -199,6 +227,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
 
   return (
     <>
+      <div ref={collapseRef} style={isDeleting ? { pointerEvents: 'none' } : undefined}>
       <div
         ref={setNodeRef}
         className={`relative min-w-0 overflow-visible rounded-lg shadow-sm ${
@@ -570,6 +599,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
           )}
       </div>
 
+      </div>
       <ConfirmDialog
         isOpen={showDeleteConfirm}
         title="Delete Task"
