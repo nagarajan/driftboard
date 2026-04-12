@@ -64,7 +64,9 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
     moveTask,
     reorderTasks,
     reorderSubtasks,
+    moveSubtaskToTask,
     convertTaskToSubtask,
+    convertSubtaskToTask,
     addSwimlane,
     pushHistory,
   } = useBoardStore();
@@ -127,11 +129,23 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
       return filtered.length > 0 ? filtered : collisions;
     }
 
-    // When dragging a subtask, only consider collisions with subtasks
+    // When shift-dragging a subtask, only allow dropping onto tasks or swimlane-drop zones
+    // (to convert the subtask into a task at that position)
+    if (dragType === 'subtask' && isShiftDownRef.current) {
+      const filtered = collisions.filter((collision) => {
+        const overType = collision.data?.droppableContainer?.data?.current?.type;
+        return overType === 'task' || overType === 'swimlane-drop';
+      });
+      return filtered.length > 0 ? filtered : [];
+    }
+
+    // When dragging a subtask normally, allow dropping onto subtasks or tasks
+    // (subtask-to-subtask = reorder within same task or move to other task,
+    //  subtask-to-task = move subtask to that task)
     if (dragType === 'subtask') {
       const filtered = collisions.filter((collision) => {
         const overType = collision.data?.droppableContainer?.data?.current?.type;
-        return overType === 'subtask';
+        return overType === 'subtask' || overType === 'task';
       });
       return filtered.length > 0 ? filtered : collisions;
     }
@@ -196,12 +210,18 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
     if (activeData?.type === 'task') {
       taskDragStartSwimlaneId.current = activeData.swimlaneId as string;
       pushHistory('Move or reorder task');
+    } else if (activeData?.type === 'subtask') {
+      taskDragStartSwimlaneId.current = null;
+      if (isShiftDownRef.current) {
+        setIsShiftDragging(true);
+        pushHistory('Convert subtask to task');
+      } else {
+        pushHistory('Move subtask');
+      }
     } else {
       taskDragStartSwimlaneId.current = null;
       if (activeData?.type === 'swimlane') {
         pushHistory('Reorder columns');
-      } else if (activeData?.type === 'subtask') {
-        pushHistory('Reorder subtasks');
       }
     }
   };
@@ -264,31 +284,35 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
       return;
     }
 
-    // Handle shift-drag drop: convert task to subtask
+    // Handle shift-drag drop
     if (wasShiftDragging) {
       const activeData = active.data.current;
       const overData = over?.data.current;
 
-      // Only proceed if dropped onto a valid task (not a subtask, not itself, not empty space)
-      if (
-        over &&
-        activeData?.type === 'task' &&
-        overData?.type === 'task' &&
-        activeData.task.id !== overData.task.id
-      ) {
-        const draggedTaskId = activeData.task.id;
-        const targetTaskId = overData.task.id;
-        convertTaskToSubtask(draggedTaskId, targetTaskId);
+      if (activeData?.type === 'task') {
+        // Task shift-drag: convert task to subtask of the hovered task
+        if (
+          over &&
+          overData?.type === 'task' &&
+          activeData.task.id !== overData.task.id
+        ) {
+          const draggedTaskId = activeData.task.id;
+          const targetTaskId = overData.task.id;
+          convertTaskToSubtask(draggedTaskId, targetTaskId);
+        }
+        // Dropped anywhere else - no-op
       }
-      // Dropped anywhere else - no-op (toast is not needed, nothing happens)
+      // Subtask shift-drag is handled further down in the subtask block below
       taskDragStartSwimlaneId.current = null;
-      return;
+      if (activeData?.type !== 'subtask') return;
+      // For subtask shift-drag with no valid drop target, fall through to subtask section
+      // which will handle the no-op case
     }
 
-    if (!over) return;
+    if (!over && !(wasShiftDragging && active.data.current?.type === 'subtask')) return;
 
     const activeData = active.data.current;
-    const overData = over.data.current;
+    const overData = over?.data.current;
 
     if (!activeData) return;
 
@@ -377,26 +401,60 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
       return;
     }
 
-    // Handle subtask reordering within the same task
+    // Handle subtask dragging
     if (activeData.type === 'subtask') {
-      if (overData?.type === 'subtask') {
-        const taskId = activeData.taskId;
-        const overTaskId = overData.taskId;
+      const subtaskId = activeData.subtask.id;
+      const fromTaskId = activeData.taskId;
 
-        // Only allow reordering within the same task
-        if (taskId === overTaskId) {
-          const task = tasks[taskId];
+      // Shift-drag: convert subtask to a task at the dropped position
+      if (wasShiftDragging) {
+        if (over && overData) {
+          if (overData.type === 'task') {
+            // Dropped onto a task - insert the new task at that task's index
+            const targetTaskId = overData.task.id;
+            const targetSwimlaneId = overData.swimlaneId;
+            const swimlane = swimlanes[targetSwimlaneId];
+            if (swimlane) {
+              const sortedTaskIds = sortTaskIdsByPriority(swimlane.taskIds, tasks);
+              const targetIndex = sortedTaskIds.indexOf(targetTaskId);
+              convertSubtaskToTask(subtaskId, fromTaskId, targetSwimlaneId, targetIndex !== -1 ? targetIndex : undefined, { skipHistory: true });
+            }
+          } else if (overData.type === 'swimlane-drop') {
+            // Dropped on empty swimlane area - append to end
+            convertSubtaskToTask(subtaskId, fromTaskId, overData.swimlaneId, undefined, { skipHistory: true });
+          }
+        }
+        // Dropped anywhere else (no over, or invalid target) - no-op
+        return;
+      }
+
+      // Normal drag: move subtask to another task, or reorder within same task
+      if (overData?.type === 'subtask') {
+        const toTaskId = overData.taskId;
+
+        if (fromTaskId === toTaskId) {
+          // Reorder within the same task
+          const task = tasks[fromTaskId];
           if (task) {
             const subtaskIds = sortSubtasksByPriority(task.subtasks).map((st) => st.id);
-            const oldIndex = subtaskIds.indexOf(activeData.subtask.id);
+            const oldIndex = subtaskIds.indexOf(subtaskId);
             const newIndex = subtaskIds.indexOf(overData.subtask.id);
 
             if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
               const newOrder = arrayMove(subtaskIds, oldIndex, newIndex);
-              reorderSubtasks(taskId, newOrder, { skipHistory: true });
+              reorderSubtasks(fromTaskId, newOrder, { skipHistory: true });
               showToast('Subtasks reordered', 'move');
             }
           }
+        } else {
+          // Move to a different task
+          moveSubtaskToTask(subtaskId, fromTaskId, toTaskId, { skipHistory: true });
+        }
+      } else if (overData?.type === 'task') {
+        // Dropped directly onto a task card - move subtask to that task
+        const toTaskId = overData.task.id;
+        if (toTaskId !== fromTaskId) {
+          moveSubtaskToTask(subtaskId, fromTaskId, toTaskId, { skipHistory: true });
         }
       }
     }
@@ -471,6 +529,7 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
                   boardId={board.id}
                   isTaskDragging={activeType === 'task' || activeType === 'task-shift-cancelled'}
                   isShiftDragging={isShiftDragging}
+                  isSubtaskDragging={activeType === 'subtask' && !isShiftDragging}
                   searchQuery={searchQuery}
                 />
               );

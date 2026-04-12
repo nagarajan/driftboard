@@ -111,6 +111,8 @@ interface BoardStore extends AppState {
   deleteSubtask: (taskId: string, subtaskId: string) => void;
   toggleSubtaskComplete: (taskId: string, subtaskId: string) => void;
   reorderSubtasks: (taskId: string, subtaskIds: string[], options?: HistoryOptions) => void;
+  moveSubtaskToTask: (subtaskId: string, fromTaskId: string, toTaskId: string, options?: HistoryOptions) => void;
+  convertSubtaskToTask: (subtaskId: string, fromTaskId: string, toSwimlaneId: string, atIndex?: number, options?: HistoryOptions) => void;
 
   // Settings
   setFontSize: (size: FontSize) => void;
@@ -1659,6 +1661,103 @@ export const useBoardStore = create<BoardStore>()(
             ...h,
           };
         });
+      },
+
+      moveSubtaskToTask: (subtaskId: string, fromTaskId: string, toTaskId: string, options?: HistoryOptions) => {
+        let subtaskTitle = '';
+        let toTaskTitle = '';
+        set((state) => {
+          const fromTask = state.tasks[fromTaskId];
+          const toTask = state.tasks[toTaskId];
+          if (!fromTask || !toTask) return state;
+
+          const subtask = fromTask.subtasks.find((st) => st.id === subtaskId);
+          if (!subtask) return state;
+
+          subtaskTitle = subtask.title;
+          toTaskTitle = toTask.title;
+
+          const h = options?.skipHistory
+            ? {}
+            : mergeHistory(state, `Move subtask "${subtask.title}" to "${toTask.title}"`);
+
+          return {
+            tasks: {
+              ...state.tasks,
+              [fromTaskId]: {
+                ...fromTask,
+                subtasks: fromTask.subtasks.filter((st) => st.id !== subtaskId),
+              },
+              [toTaskId]: {
+                ...toTask,
+                subtasks: sortSubtasksByPriority([...toTask.subtasks, subtask]),
+              },
+            },
+            ...h,
+          };
+        });
+        if (subtaskTitle && toTaskTitle) {
+          showToast(`"${subtaskTitle}" moved to "${toTaskTitle}"`, 'move');
+        }
+      },
+
+      convertSubtaskToTask: (subtaskId: string, fromTaskId: string, toSwimlaneId: string, atIndex?: number, options?: HistoryOptions) => {
+        let subtaskTitle = '';
+        set((state) => {
+          const fromTask = state.tasks[fromTaskId];
+          const swimlane = state.swimlanes[toSwimlaneId];
+          if (!fromTask || !swimlane) return state;
+
+          const subtask = fromTask.subtasks.find((st) => st.id === subtaskId);
+          if (!subtask) return state;
+
+          subtaskTitle = subtask.title;
+
+          const newTask: Task = {
+            id: subtask.id,
+            title: subtask.title,
+            completed: subtask.completed,
+            priority: subtask.priority,
+            note: subtask.note,
+            subtasks: [],
+          };
+
+          const h = options?.skipHistory
+            ? {}
+            : mergeHistory(state, `Convert subtask "${subtask.title}" to task`);
+
+          const newTaskIds = [...swimlane.taskIds];
+          if (atIndex !== undefined) {
+            newTaskIds.splice(atIndex, 0, newTask.id);
+          } else {
+            newTaskIds.push(newTask.id);
+          }
+
+          return {
+            tasks: {
+              ...state.tasks,
+              [fromTaskId]: {
+                ...fromTask,
+                subtasks: fromTask.subtasks.filter((st) => st.id !== subtaskId),
+              },
+              [newTask.id]: newTask,
+            },
+            swimlanes: {
+              ...state.swimlanes,
+              [toSwimlaneId]: {
+                ...swimlane,
+                taskIds: sortTaskIdsByPriority(newTaskIds, {
+                  ...state.tasks,
+                  [newTask.id]: newTask,
+                }),
+              },
+            },
+            ...h,
+          };
+        });
+        if (subtaskTitle) {
+          showToast(`"${subtaskTitle}" converted to task`, 'add');
+        }
       },
 
       // Settings (font size global; theme is per-board in boards[].theme, synced via Firestore)

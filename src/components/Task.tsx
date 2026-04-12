@@ -22,12 +22,13 @@ interface TaskProps {
   swimlaneId: string;
   isTaskDragging?: boolean;
   isShiftDragging?: boolean;
+  isSubtaskDragging?: boolean;
   searchQuery?: string;
 }
 
 const DONE_MOVE_DELAY_MS = 1500;
 
-export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging = false, searchQuery = '' }: TaskProps) {
+export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging = false, isSubtaskDragging = false, searchQuery = '' }: TaskProps) {
   const {
     renameTask,
     setTaskPriority,
@@ -238,7 +239,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
         style={{
           ...style,
           backgroundColor: 'var(--bg-card)',
-          borderColor: isOver && isShiftDragging
+          borderColor: (isOver && isShiftDragging) || (isOver && isSubtaskDragging)
             ? 'var(--accent-primary)'
             : awaitingAck
               ? 'var(--accent-primary)'
@@ -247,8 +248,8 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
                   task.completed ? 'var(--border-completed)' : 'var(--border-card)'
                 ),
           borderStyle: 'solid',
-          borderWidth: isOver && isShiftDragging ? '3px' : task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
-          outline: isOver && isShiftDragging ? '2px solid var(--accent-primary)' : 'none',
+          borderWidth: (isOver && isShiftDragging) || (isOver && isSubtaskDragging) ? '3px' : task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
+          outline: (isOver && isShiftDragging) || (isOver && isSubtaskDragging) ? '2px solid var(--accent-primary)' : 'none',
           outlineOffset: '2px',
           opacity: snoozed ? 0.45 : isSearchActive && !taskMatches ? 0.3 : 1,
           filter: isSearchActive && !taskMatches ? 'grayscale(0.85)' : 'none',
