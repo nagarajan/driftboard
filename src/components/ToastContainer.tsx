@@ -5,6 +5,7 @@ const kindClasses: Record<ToastKind, string> = {
   delete: 'bg-rose-100 text-rose-900 border border-rose-200/90 shadow-md',
   edit: 'bg-sky-100 text-sky-900 border border-sky-200/90 shadow-md',
   move: 'bg-amber-100 text-amber-900 border border-amber-200/90 shadow-md',
+  error: 'bg-red-100 text-red-900 border border-red-300/90 shadow-md',
 };
 
 export function ToastContainer() {

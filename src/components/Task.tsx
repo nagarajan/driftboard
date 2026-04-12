@@ -21,12 +21,13 @@ interface TaskProps {
   task: TaskType;
   swimlaneId: string;
   isTaskDragging?: boolean;
+  isShiftDragging?: boolean;
   searchQuery?: string;
 }
 
 const DONE_MOVE_DELAY_MS = 1500;
 
-export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '' }: TaskProps) {
+export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging = false, searchQuery = '' }: TaskProps) {
   const {
     renameTask,
     setTaskPriority,
@@ -115,6 +116,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
     transform,
     transition,
     isDragging,
+    isOver,
   } = useSortable({
     id: `task-${task.id}`,
     data: {
@@ -236,14 +238,18 @@ export function Task({ task, swimlaneId, isTaskDragging = false, searchQuery = '
         style={{
           ...style,
           backgroundColor: 'var(--bg-card)',
-          borderColor: awaitingAck
+          borderColor: isOver && isShiftDragging
             ? 'var(--accent-primary)'
-            : getPriorityBorderColor(
-                task.priority,
-                task.completed ? 'var(--border-completed)' : 'var(--border-card)'
-              ),
+            : awaitingAck
+              ? 'var(--accent-primary)'
+              : getPriorityBorderColor(
+                  task.priority,
+                  task.completed ? 'var(--border-completed)' : 'var(--border-card)'
+                ),
           borderStyle: 'solid',
-          borderWidth: task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
+          borderWidth: isOver && isShiftDragging ? '3px' : task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
+          outline: isOver && isShiftDragging ? '2px solid var(--accent-primary)' : 'none',
+          outlineOffset: '2px',
           opacity: snoozed ? 0.45 : isSearchActive && !taskMatches ? 0.3 : 1,
           filter: isSearchActive && !taskMatches ? 'grayscale(0.85)' : 'none',
           transition: 'opacity 0.15s, filter 0.15s',

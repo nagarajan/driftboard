@@ -102,6 +102,7 @@ interface BoardStore extends AppState {
   reorderTasks: (swimlaneId: string, taskIds: string[], options?: HistoryOptions) => void;
 
   // Subtask actions
+  convertTaskToSubtask: (taskId: string, parentTaskId: string) => void;
   addSubtask: (taskId: string, title: string) => void;
   renameSubtask: (taskId: string, subtaskId: string, title: string) => void;
   setSubtaskPriority: (taskId: string, subtaskId: string, priority: Priority) => void;
@@ -1376,6 +1377,51 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       // Subtask actions
+      convertTaskToSubtask: (taskId: string, parentTaskId: string) => {
+        let taskTitle = '';
+        let parentTitle = '';
+        set((state) => {
+          const task = state.tasks[taskId];
+          const parentTask = state.tasks[parentTaskId];
+          if (!task || !parentTask) return state;
+
+          taskTitle = task.title;
+          parentTitle = parentTask.title;
+
+          const newSubtask: Subtask = {
+            id: task.id,
+            title: task.title,
+            completed: task.completed,
+            priority: task.priority,
+            note: task.note,
+          };
+
+          const h = mergeHistory(state, `Convert "${task.title}" to subtask of "${parentTask.title}"`);
+
+          const newTasks = { ...state.tasks };
+          delete newTasks[taskId];
+          newTasks[parentTaskId] = {
+            ...parentTask,
+            subtasks: sortSubtasksByPriority([...parentTask.subtasks, newSubtask]),
+          };
+
+          const newSwimlanes = { ...state.swimlanes };
+          for (const sl of Object.values(state.swimlanes)) {
+            if (sl.taskIds.includes(taskId)) {
+              newSwimlanes[sl.id] = {
+                ...sl,
+                taskIds: sl.taskIds.filter((id) => id !== taskId),
+              };
+            }
+          }
+
+          return { tasks: newTasks, swimlanes: newSwimlanes, ...h };
+        });
+        if (taskTitle && parentTitle) {
+          showToast(`"${taskTitle}" is now a subtask of "${parentTitle}"`, 'add');
+        }
+      },
+
       addSubtask: (taskId: string, title: string) => {
         const subtask: Subtask = {
           id: uuidv4(),

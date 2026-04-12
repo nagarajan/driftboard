@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 
-export type ToastKind = 'add' | 'delete' | 'edit' | 'move';
+export type ToastKind = 'add' | 'delete' | 'edit' | 'move' | 'error';
 
 export interface ToastItem {
   id: string;

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, type WheelEvent as ReactWheelEvent } from 'react';
+import { useState, useCallback, useRef, useEffect, type WheelEvent as ReactWheelEvent } from 'react';
 import type { DragEndEvent, DragOverEvent, DragStartEvent, CollisionDetection } from '@dnd-kit/core';
 import {
   DndContext,
@@ -64,6 +64,7 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
     moveTask,
     reorderTasks,
     reorderSubtasks,
+    convertTaskToSubtask,
     addSwimlane,
     pushHistory,
   } = useBoardStore();
@@ -71,8 +72,25 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<string | null>(null);
+  const [isShiftDragging, setIsShiftDragging] = useState(false);
   const taskDragStartSwimlaneId = useRef<string | null>(null);
+  const isShiftDownRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') isShiftDownRef.current = true;
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') isShiftDownRef.current = false;
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // Custom collision detection that filters based on what's being dragged
   const customCollisionDetection: CollisionDetection = useCallback((args) => {
@@ -84,6 +102,20 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
 
     if (!dragType || collisions.length === 0) {
       return collisions;
+    }
+
+    // When shift-dragging a task, only allow dropping onto other tasks (not subtasks or swimlanes)
+    if (dragType === 'task' && isShiftDownRef.current) {
+      const activeTaskId = active.data.current?.task?.id;
+      const filtered = collisions.filter((collision) => {
+        const overData = collision.data?.droppableContainer?.data?.current;
+        if (overData?.type !== 'task') return false;
+        // Cannot drop onto itself
+        if (overData?.task?.id === activeTaskId) return false;
+        return true;
+      });
+      // Return empty list if no valid targets - this means no drop will be registered
+      return filtered;
     }
 
     // When dragging a task, only consider collisions with tasks, swimlanes, or swimlane-drop zones
@@ -138,8 +170,28 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    setActiveId(active.id as string);
     const activeData = active.data.current;
+
+    if (activeData?.type === 'task' && isShiftDownRef.current) {
+      const task: TaskType = activeData.task;
+      if (task.subtasks && task.subtasks.length > 0) {
+        showToast('Cannot shift-drag a task that has subtasks', 'error');
+        // Cancel the drag by not setting activeId - dnd-kit will still start the drag
+        // but we mark it as a cancelled shift drag so handleDragEnd is a no-op
+        setActiveId(active.id as string);
+        setActiveType('task-shift-cancelled');
+        setIsShiftDragging(false);
+        return;
+      }
+      setIsShiftDragging(true);
+      setActiveId(active.id as string);
+      setActiveType(activeData.type);
+      taskDragStartSwimlaneId.current = activeData.swimlaneId as string;
+      pushHistory('Convert task to subtask');
+      return;
+    }
+
+    setActiveId(active.id as string);
     setActiveType(activeData?.type || null);
     if (activeData?.type === 'task') {
       taskDragStartSwimlaneId.current = activeData.swimlaneId as string;
@@ -162,6 +214,9 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
     const overData = over.data.current;
 
     if (!activeData || !overData) return;
+
+    // During shift-drag, do not move tasks across swimlanes - tasks stay in place
+    if (isShiftDownRef.current && activeData.type === 'task') return;
 
     // Handle task being dragged over a different swimlane
     if (activeData.type === 'task') {
@@ -198,8 +253,37 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    const wasShiftDragging = isShiftDragging;
     setActiveId(null);
     setActiveType(null);
+    setIsShiftDragging(false);
+
+    // Cancelled shift drag (task had subtasks) - do nothing
+    if (activeType === 'task-shift-cancelled') {
+      taskDragStartSwimlaneId.current = null;
+      return;
+    }
+
+    // Handle shift-drag drop: convert task to subtask
+    if (wasShiftDragging) {
+      const activeData = active.data.current;
+      const overData = over?.data.current;
+
+      // Only proceed if dropped onto a valid task (not a subtask, not itself, not empty space)
+      if (
+        over &&
+        activeData?.type === 'task' &&
+        overData?.type === 'task' &&
+        activeData.task.id !== overData.task.id
+      ) {
+        const draggedTaskId = activeData.task.id;
+        const targetTaskId = overData.task.id;
+        convertTaskToSubtask(draggedTaskId, targetTaskId);
+      }
+      // Dropped anywhere else - no-op (toast is not needed, nothing happens)
+      taskDragStartSwimlaneId.current = null;
+      return;
+    }
 
     if (!over) return;
 
@@ -385,7 +469,8 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
                   swimlane={swimlane}
                   tasks={swimlaneTasks}
                   boardId={board.id}
-                  isTaskDragging={activeType === 'task'}
+                  isTaskDragging={activeType === 'task' || activeType === 'task-shift-cancelled'}
+                  isShiftDragging={isShiftDragging}
                   searchQuery={searchQuery}
                 />
               );

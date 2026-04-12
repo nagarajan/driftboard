@@ -3,12 +3,16 @@ import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import type { SortingStrategy } from '@dnd-kit/sortable';
 import type { Swimlane as SwimlaneType, Task as TaskType } from '../types';
 import { EditableTitle } from './EditableTitle';
 import { Task } from './Task';
 import { SwimlaneMenu } from './SwimlaneMenu';
 import { useBoardStore } from '../store/boardStore';
 import { isTaskSnoozed } from '../utils/taskSnooze';
+
+// A no-op sorting strategy: other items never move out of the way
+const noDisplacementStrategy: SortingStrategy = () => null;
 
 function AddTaskWidget({
   value,
@@ -62,10 +66,11 @@ interface SwimlaneProps {
   tasks: TaskType[];
   boardId: string;
   isTaskDragging?: boolean;
+  isShiftDragging?: boolean;
   searchQuery?: string;
 }
 
-export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, searchQuery = '' }: SwimlaneProps) {
+export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isShiftDragging = false, searchQuery = '' }: SwimlaneProps) {
   const { renameSwimlane, addTask } = useBoardStore();
   const [addTaskPosition, setAddTaskPosition] = useState<'top' | 'bottom' | null>(null);
   const isAddingTask = addTaskPosition !== null;
@@ -166,7 +171,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, sea
       <div
         ref={setDroppableRef}
         className="flex flex-col"
-        style={{ padding: 'var(--padding-section, 0.75rem)', gap: 'var(--gap-md, 0.75rem)', backgroundColor: isOver ? 'var(--bg-active)' : 'transparent' }}
+        style={{ padding: 'var(--padding-section, 0.75rem)', gap: 'var(--gap-md, 0.75rem)', backgroundColor: isOver && !isShiftDragging ? 'var(--bg-active)' : 'transparent' }}
       >
         {/* Add task widget - shown at top when triggered from header + button */}
         {addTaskPosition === 'top' && <AddTaskWidget
@@ -176,7 +181,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, sea
           onClose={closeAddTask}
         />}
 
-        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <SortableContext items={taskIds} strategy={isShiftDragging ? noDisplacementStrategy : verticalListSortingStrategy}>
           {tasks.map((task, index) => (
             <div key={task.id} className="contents">
               {index === firstSnoozedTaskIndex && (
@@ -199,7 +204,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, sea
                   />
                 </div>
               )}
-              <Task task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} searchQuery={searchQuery} />
+              <Task task={task} swimlaneId={swimlane.id} isTaskDragging={isTaskDragging} isShiftDragging={isShiftDragging} searchQuery={searchQuery} />
             </div>
           ))}
         </SortableContext>
