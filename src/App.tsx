@@ -14,6 +14,7 @@ import { FontSizeSelector } from './components/FontSizeSelector';
 import { SwimlaneWidthSelector } from './components/SwimlaneWidthSelector';
 import { ColorThemeSelector } from './components/ColorThemeSelector';
 import { ImportExportButtons } from './components/ImportExportButtons';
+import { BackupRestoreDialog } from './components/BackupRestoreDialog';
 import { GoogleAccountWidget } from './components/GoogleAccountWidget';
 import { ToastContainer } from './components/ToastContainer';
 import { ReadyTasksPopup } from './components/ReadyTasksPopup';
@@ -81,6 +82,7 @@ function App() {
   const [notifFailureOpen, setNotifFailureOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(getNotificationsEnabled);
   const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
+  const [driveBackupsOpen, setDriveBackupsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appStyle: CSSProperties = {
@@ -345,7 +347,7 @@ function App() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase mb-2" style={{ color: 'var(--text-muted)' }}>Data</p>
-                    <ImportExportButtons />
+                    <ImportExportButtons onOpenDriveBackups={() => { setDriveBackupsOpen(true); setMobileMenuOpen(false); }} />
                     {user && (
                       <button
                         onClick={() => setClearDataConfirmOpen(true)}
@@ -413,6 +415,10 @@ function App() {
         confirmLabel="Clear all data"
         onConfirm={handleClearAllData}
         onCancel={() => setClearDataConfirmOpen(false)}
+      />
+      <BackupRestoreDialog
+        isOpen={driveBackupsOpen}
+        onClose={() => setDriveBackupsOpen(false)}
       />
     </div>
   );

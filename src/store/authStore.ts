@@ -10,6 +10,7 @@ import {
 import { auth } from '../config/firebase';
 import { recordKnownAccount, removeKnownAccountByUid } from './knownAccounts';
 import { requestGoogleTokensSilent } from '../utils/googleIdentitySilentToken';
+import { getDriveAccessToken } from '../utils/driveAuth';
 
 const GOOGLE_OAUTH_CLIENT_ID =
   (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string | undefined) ?? '';
@@ -36,6 +37,8 @@ interface AuthStore extends AuthState {
   /** Switch this tab to a previously used account (silent token when possible). */
   signInAsKnownAccount: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Request incremental Drive appdata scope consent (returns true if granted). */
+  requestDriveAccess: () => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -152,6 +155,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
       console.error('Sign out error:', error);
     } finally {
       set({ loading: false });
+    }
+  },
+
+  requestDriveAccess: async () => {
+    const user = auth.currentUser;
+    if (!user?.uid || !user?.email) return false;
+    try {
+      const token = await getDriveAccessToken(user.uid, user.email, true);
+      return token !== null;
+    } catch {
+      return false;
     }
   },
 

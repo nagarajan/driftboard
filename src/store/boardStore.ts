@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { doc, setDoc, onSnapshot, type DocumentReference } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { maybeTriggerBackup } from '../utils/driveBackup';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme, Priority, Workspace } from '../types';
 import { DEFAULT_BOARD_THEME } from '../types';
 import { sanitizeEmail } from './authStore';
@@ -2140,6 +2141,13 @@ function startFirestoreSync() {
         } else {
           saveToFirestore(payload);
         }
+
+        const driveUid = auth.currentUser?.uid;
+        if (driveUid && currentUserEmail) {
+          maybeTriggerBackup(driveUid, currentUserEmail, () =>
+            useBoardStore.getState().getExportData()
+          ).catch((err) => console.error('Drive backup error:', err));
+        }
       }
     });
     console.log('Subscribed to local state changes');
@@ -2235,6 +2243,11 @@ function startFirestoreSync() {
 
 // Initialize or switch user
 export function initializeForUser(email: string | null) {
+  // Skip if already syncing for this user (e.g. Drive scope re-auth popup)
+  if (email && email === currentUserEmail && firestoreDoc) {
+    return;
+  }
+
   console.log('Initializing for user:', email);
   
   // Stop any existing sync
@@ -2327,4 +2340,38 @@ export async function clearAllData(): Promise<void> {
 
   // Add a fresh default board (this will sync to Firestore via the subscriber).
   useBoardStore.getState().addBoard('My Board', true);
+}
+
+/**
+ * Replace all boards/tasks/swimlanes/workspaces with data from a backup.
+ * Normalizes the imported data and pushes to Firestore via the subscriber.
+ */
+export function replaceAllData(data: ExportData): void {
+  extendBlockPeriod(5000);
+
+  const boards = stripUndefinedFields(data.boards ?? {});
+  const tasks = normalizeTasksRecord(stripUndefinedFields(data.tasks ?? {}));
+  const swimlanes = sortSwimlanesTaskIdsByPriority(
+    stripUndefinedFields(data.swimlanes ?? {}),
+    tasks,
+  );
+  const boardOrderIds = data.boardOrderIds ?? [];
+  const workspaces = stripUndefinedFields(data.workspaces ?? {});
+  const workspaceOrderIds = data.workspaceOrderIds ?? [];
+  const firstBoardId = getFirstBoardId(boards, boardOrderIds);
+
+  prevTaskData = null;
+
+  useBoardStore.setState({
+    boards,
+    swimlanes,
+    tasks,
+    boardOrderIds,
+    workspaces,
+    workspaceOrderIds,
+    activeBoardId: firstBoardId,
+    activeWorkspaceId: null,
+    _isRemoteUpdate: false,
+    ...emptyHistoryState,
+  });
 }

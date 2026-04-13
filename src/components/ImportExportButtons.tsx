@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
 import { useBoardStore } from '../store/boardStore';
 import type { ExportData } from '../store/boardStore';
+import { useAuthStore } from '../store/authStore';
 import { showToast } from '../store/toastStore';
 
-export function ImportExportButtons() {
+export function ImportExportButtons({ onOpenDriveBackups }: { onOpenDriveBackups?: () => void }) {
+  const user = useAuthStore((s) => s.user);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<{
     type: 'success' | 'error';
@@ -83,66 +85,96 @@ export function ImportExportButtons() {
   };
 
   return (
-    <div className="flex items-center">
-      <button
-        onClick={handleExport}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border border-r-0 rounded-l transition-colors hover:opacity-80"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          borderColor: 'var(--border-default)',
-          color: 'var(--text-secondary)',
-        }}
-        title="Export all data"
-      >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+    <div>
+      <div className="flex items-center">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border border-r-0 rounded-l transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-default)',
+            color: 'var(--text-secondary)',
+          }}
+          title="Export all data"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-          />
-        </svg>
-        Export
-      </button>
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
+          </svg>
+          Export
+        </button>
 
-      <button
-        onClick={handleImportClick}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border rounded-r transition-colors hover:opacity-80"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          borderColor: 'var(--border-default)',
-          color: 'var(--text-secondary)',
-        }}
-        title="Import data"
-      >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+        <button
+          onClick={handleImportClick}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-[0.85em] border rounded-r transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-default)',
+            color: 'var(--text-secondary)',
+          }}
+          title="Import data"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-          />
-        </svg>
-        Import
-      </button>
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+            />
+          </svg>
+          Import
+        </button>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+
+      {user && onOpenDriveBackups && (
+        <button
+          onClick={onOpenDriveBackups}
+          className="flex items-center gap-1.5 w-full px-3 py-1.5 mt-1 text-[0.85em] border rounded transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-default)',
+            color: 'var(--text-secondary)',
+          }}
+          title="Manage Google Drive backups"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+            />
+          </svg>
+          Drive Backups
+        </button>
+      )}
 
       {importStatus && (
         <div
