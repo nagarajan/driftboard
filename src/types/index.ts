@@ -34,7 +34,8 @@ export type SwimlaneWidth = 75 | 100 | 125 | 150 | 175 | 200;
 
 // Pastel themes: rose, lavender, mint, peach
 // Saturated themes: ocean, forest, sunset, grape
-// Plus dark theme
+// Dark themes: dark, midnight, charcoal, crimson, slate, amber
+// Niche themes: steampunk, futuristic
 export type Theme =
   | 'dark'
   | 'rose'
@@ -54,7 +55,9 @@ export type Theme =
   | 'charcoal'
   | 'crimson'
   | 'slate'
-  | 'amber';
+  | 'amber'
+  | 'steampunk'
+  | 'futuristic';
 
 /** Default / fallback theme (new boards, missing theme, UI when no board selected). */
 export const DEFAULT_BOARD_THEME: Theme = 'ocean';

@@ -59,6 +59,9 @@ const themeClasses: Record<string, string> = {
   crimson: 'theme-crimson',
   slate: 'theme-slate',
   amber: 'theme-amber',
+  // Niche themes
+  steampunk: 'theme-steampunk',
+  futuristic: 'theme-futuristic',
 };
 
 const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';

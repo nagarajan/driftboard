@@ -7,7 +7,7 @@ interface ThemeOption {
   value: Theme;
   label: string;
   colors: string[]; // Preview colors for the theme
-  category: 'pastel' | 'saturated' | 'dark';
+  category: 'pastel' | 'saturated' | 'dark' | 'niche';
 }
 
 const themeOptions: ThemeOption[] = [
@@ -33,10 +33,27 @@ const themeOptions: ThemeOption[] = [
   { value: 'crimson', label: 'Crimson', colors: ['#0f0205', '#7f1d1d', '#1f050d'], category: 'dark' },
   { value: 'slate', label: 'Slate', colors: ['#0d1117', '#161b22', '#1c2230'], category: 'dark' },
   { value: 'amber', label: 'Amber', colors: ['#120d02', '#78350f', '#221808'], category: 'dark' },
+  // Niche themes
+  { value: 'steampunk', label: 'Steampunk', colors: ['#1a120a', '#5c3a1e', '#b8860b'], category: 'niche' },
+  { value: 'futuristic', label: 'Futuristic', colors: ['#0a0e14', '#141c28', '#00b4d8'], category: 'niche' },
 ];
+
+type CategoryKey = ThemeOption['category'];
+
+const categories: { key: CategoryKey; label: string }[] = [
+  { key: 'pastel', label: 'Pastel' },
+  { key: 'saturated', label: 'Saturated' },
+  { key: 'dark', label: 'Dark' },
+  { key: 'niche', label: 'Niche' },
+];
+
+const themesByCategory = Object.fromEntries(
+  categories.map(({ key }) => [key, themeOptions.filter((t) => t.category === key)])
+) as Record<CategoryKey, ThemeOption[]>;
 
 export function ColorThemeSelector() {
   const [isOpen, setIsOpen] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<CategoryKey | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const activeBoardId = useBoardStore((s) => s.activeBoardId);
   const boards = useBoardStore((s) => s.boards);
@@ -46,6 +63,13 @@ export function ColorThemeSelector() {
   const theme = activeBoard?.theme ?? DEFAULT_BOARD_THEME;
 
   const currentTheme = themeOptions.find((t) => t.value === theme) || themeOptions[0];
+  const activeCategory = currentTheme.category;
+
+  useEffect(() => {
+    if (isOpen) {
+      setExpandedCategory(activeCategory);
+    }
+  }, [isOpen, activeCategory]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -83,9 +107,19 @@ export function ColorThemeSelector() {
     </div>
   );
 
-  const pastelThemes = themeOptions.filter((t) => t.category === 'pastel');
-  const saturatedThemes = themeOptions.filter((t) => t.category === 'saturated');
-  const darkThemes = themeOptions.filter((t) => t.category === 'dark');
+  const renderCategoryPreview = (categoryKey: CategoryKey) => {
+    const items = themesByCategory[categoryKey];
+    return (
+      <div className="flex" style={{ gap: '0.25em' }}>
+        {items.slice(0, 4).map((t) => renderColorPreview(t.colors, '1em'))}
+        {items.length > 4 && (
+          <span style={{ fontSize: '0.7em', color: 'var(--text-muted)', lineHeight: '1em' }}>
+            +{items.length - 4}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="relative" ref={menuRef}>
@@ -119,116 +153,88 @@ export function ColorThemeSelector() {
           style={{
             backgroundColor: 'var(--bg-card)',
             border: '1px solid var(--border-default)',
-            minWidth: '180px',
+            minWidth: '200px',
           }}
         >
-          {/* Pastel themes */}
-          <div style={{ padding: '0.5em', borderBottom: '1px solid var(--border-default)' }}>
-            <p
-              className="font-semibold uppercase"
-              style={{ color: 'var(--text-muted)', fontSize: '0.7em', padding: '0.25em 0.5em' }}
-            >
-              Pastel
-            </p>
-            {pastelThemes.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => handleSelectTheme(option.value)}
-                className={`w-full flex items-center rounded transition-colors ${theme === option.value ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
-                style={{
-                  padding: '0.5em',
-                  gap: '0.5em',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {renderColorPreview(option.colors, '1.5em')}
-                <span style={{ fontSize: '0.9em' }}>{option.label}</span>
-                {theme === option.value && (
-                  <svg
-                    className="ml-auto"
-                    style={{ width: '1em', height: '1em', color: 'var(--accent-primary)' }}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
+          {categories.map(({ key, label }, idx) => {
+            const isExpanded = expandedCategory === key;
+            const categoryThemes = themesByCategory[key];
+            const hasActiveTheme = categoryThemes.some((t) => t.value === theme);
+            const isLast = idx === categories.length - 1;
 
-          {/* Saturated themes */}
-          <div style={{ padding: '0.5em', borderBottom: '1px solid var(--border-default)' }}>
-            <p
-              className="font-semibold uppercase"
-              style={{ color: 'var(--text-muted)', fontSize: '0.7em', padding: '0.25em 0.5em' }}
-            >
-              Saturated
-            </p>
-            {saturatedThemes.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => handleSelectTheme(option.value)}
-                className={`w-full flex items-center rounded transition-colors ${theme === option.value ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
-                style={{
-                  padding: '0.5em',
-                  gap: '0.5em',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {renderColorPreview(option.colors, '1.5em')}
-                <span style={{ fontSize: '0.9em' }}>{option.label}</span>
-                {theme === option.value && (
+            return (
+              <div key={key} style={!isLast ? { borderBottom: '1px solid var(--border-default)' } : undefined}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedCategory(isExpanded ? null : key)}
+                  className="w-full flex items-center rounded transition-colors hover:bg-[var(--bg-hover)]"
+                  style={{
+                    padding: '0.5em 0.5em',
+                    gap: '0.5em',
+                    color: 'var(--text-primary)',
+                  }}
+                >
                   <svg
-                    className="ml-auto"
-                    style={{ width: '1em', height: '1em', color: 'var(--accent-primary)' }}
+                    style={{
+                      width: '0.75em',
+                      height: '0.75em',
+                      flexShrink: 0,
+                      transition: 'transform 150ms',
+                      transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      color: 'var(--text-muted)',
+                    }}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                )}
-              </button>
-            ))}
-          </div>
+                  <span className="font-semibold uppercase" style={{ fontSize: '0.7em', color: 'var(--text-muted)' }}>
+                    {label}
+                  </span>
+                  {hasActiveTheme && !isExpanded && (
+                    <span style={{ fontSize: '0.75em', color: 'var(--accent-primary)', marginLeft: '0.15em' }}>
+                      --
+                    </span>
+                  )}
+                  <div className="ml-auto">
+                    {renderCategoryPreview(key)}
+                  </div>
+                </button>
 
-          {/* Dark themes */}
-          <div style={{ padding: '0.5em' }}>
-            <p
-              className="font-semibold uppercase"
-              style={{ color: 'var(--text-muted)', fontSize: '0.7em', padding: '0.25em 0.5em' }}
-            >
-              Dark
-            </p>
-            {darkThemes.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => handleSelectTheme(option.value)}
-                className={`w-full flex items-center rounded transition-colors ${theme === option.value ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
-                style={{
-                  padding: '0.5em',
-                  gap: '0.5em',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                {renderColorPreview(option.colors, '1.5em')}
-                <span style={{ fontSize: '0.9em' }}>{option.label}</span>
-                {theme === option.value && (
-                  <svg
-                    className="ml-auto"
-                    style={{ width: '1em', height: '1em', color: 'var(--accent-primary)' }}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                {isExpanded && (
+                  <div style={{ padding: '0 0.5em 0.5em' }}>
+                    {categoryThemes.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleSelectTheme(option.value)}
+                        className={`w-full flex items-center rounded transition-colors ${theme === option.value ? 'bg-[var(--bg-active)]' : 'hover:bg-[var(--bg-hover)]'}`}
+                        style={{
+                          padding: '0.4em 0.5em',
+                          gap: '0.5em',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        {renderColorPreview(option.colors, '1.5em')}
+                        <span style={{ fontSize: '0.9em' }}>{option.label}</span>
+                        {theme === option.value && (
+                          <svg
+                            className="ml-auto"
+                            style={{ width: '1em', height: '1em', color: 'var(--accent-primary)' }}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </button>
-            ))}
-          </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

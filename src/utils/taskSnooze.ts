@@ -121,7 +121,7 @@ export interface SnoozePreset {
 }
 
 export const SNOOZE_PRESETS: SnoozePreset[] = [
-  { label: '10 seconds', getUntil: () => Date.now() + 10_000 },
+  { label: '5 seconds', getUntil: () => Date.now() + 5_000 },
   { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
   { label: '30 minutes', getUntil: () => addMinutes(Date.now(), 30) },
   { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },

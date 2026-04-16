@@ -181,7 +181,7 @@ export function EditableTitle({
         skipBlurSaveRef.current = false;
         setIsEditing(true);
       }}
-      className={`cursor-pointer rounded px-1 hover:bg-[var(--bg-hover)] ${
+      className={`cursor-pointer rounded px-1 ${
         renderMode === 'plain' ? 'whitespace-pre-wrap' : ''
       } ${className}`}
       style={{
