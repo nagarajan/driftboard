@@ -4,10 +4,11 @@ import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { SortingStrategy } from '@dnd-kit/sortable';
-import type { Swimlane as SwimlaneType, Task as TaskType } from '../types';
+import type { Priority, Swimlane as SwimlaneType, Task as TaskType } from '../types';
 import { EditableTitle } from './EditableTitle';
 import { Task } from './Task';
 import { SwimlaneMenu } from './SwimlaneMenu';
+import { PrioritySelect } from './PrioritySelect';
 import { useBoardStore } from '../store/boardStore';
 import { isTaskSnoozed } from '../utils/taskSnooze';
 
@@ -17,11 +18,15 @@ const noDisplacementStrategy: SortingStrategy = () => null;
 function AddTaskWidget({
   value,
   onChange,
+  priority,
+  onPriorityChange,
   onAdd,
   onClose,
 }: {
   value: string;
   onChange: (v: string) => void;
+  priority: Priority;
+  onPriorityChange: (p: Priority) => void;
   onAdd: (keepOpen: boolean) => void;
   onClose: () => void;
 }) {
@@ -35,12 +40,20 @@ function AddTaskWidget({
           if (e.key === 'Enter') onAdd(true);
           if (e.key === 'Escape') onClose();
         }}
-        onBlur={() => { if (!value.trim()) onClose(); }}
         placeholder="Task title..."
         className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
         autoFocus
       />
+      <div
+        className="flex items-center justify-between rounded px-2 py-1"
+        style={{ backgroundColor: 'var(--bg-hover)' }}
+      >
+        <span className="text-[0.8em]" style={{ color: 'var(--text-secondary)' }}>
+          Priority
+        </span>
+        <PrioritySelect value={priority} onChange={onPriorityChange} />
+      </div>
       <div className="flex gap-2">
         <button
           onClick={() => onAdd(false)}
@@ -76,9 +89,10 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
   const [addTaskPosition, setAddTaskPosition] = useState<'top' | 'bottom' | null>(null);
   const isAddingTask = addTaskPosition !== null;
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState<Priority>('none');
 
   const openAddTask = (position: 'top' | 'bottom') => setAddTaskPosition(position);
-  const closeAddTask = () => { setAddTaskPosition(null); setNewTaskTitle(''); };
+  const closeAddTask = () => { setAddTaskPosition(null); setNewTaskTitle(''); setNewTaskPriority('none'); };
   const firstSnoozedTaskIndex = tasks.findIndex((task) => isTaskSnoozed(task));
 
   const {
@@ -112,8 +126,9 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
 
   const handleAddTask = (keepOpen: boolean = false) => {
     if (newTaskTitle.trim()) {
-      addTask(swimlane.id, newTaskTitle.trim(), addTaskPosition ?? 'bottom');
+      addTask(swimlane.id, newTaskTitle.trim(), addTaskPosition ?? 'bottom', newTaskPriority);
       setNewTaskTitle('');
+      setNewTaskPriority('none');
       if (!keepOpen) {
         closeAddTask();
       }
@@ -178,6 +193,8 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
         {addTaskPosition === 'top' && <AddTaskWidget
           value={newTaskTitle}
           onChange={setNewTaskTitle}
+          priority={newTaskPriority}
+          onPriorityChange={setNewTaskPriority}
           onAdd={handleAddTask}
           onClose={closeAddTask}
         />}
@@ -221,6 +238,8 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
           <AddTaskWidget
             value={newTaskTitle}
             onChange={setNewTaskTitle}
+            priority={newTaskPriority}
+            onPriorityChange={setNewTaskPriority}
             onAdd={handleAddTask}
             onClose={closeAddTask}
           />

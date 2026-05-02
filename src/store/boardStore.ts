@@ -80,7 +80,7 @@ interface BoardStore extends AppState {
   reorderSwimlanes: (boardId: string, swimlaneIds: string[], options?: HistoryOptions) => void;
 
   // Task actions
-  addTask: (swimlaneId: string, title: string, position?: 'top' | 'bottom') => void;
+  addTask: (swimlaneId: string, title: string, position?: 'top' | 'bottom', priority?: Priority) => void;
   renameTask: (taskId: string, title: string) => void;
   setTaskPriority: (taskId: string, priority: Priority) => void;
   setTaskNote: (taskId: string, note: string) => void;
@@ -104,7 +104,7 @@ interface BoardStore extends AppState {
 
   // Subtask actions
   convertTaskToSubtask: (taskId: string, parentTaskId: string) => void;
-  addSubtask: (taskId: string, title: string) => void;
+  addSubtask: (taskId: string, title: string, priority?: Priority) => void;
   renameSubtask: (taskId: string, subtaskId: string, title: string) => void;
   setSubtaskPriority: (taskId: string, subtaskId: string, priority: Priority) => void;
   setSubtaskNote: (taskId: string, subtaskId: string, note: string) => void;
@@ -832,12 +832,12 @@ export const useBoardStore = create<BoardStore>()(
       },
 
       // Task actions
-      addTask: (swimlaneId: string, title: string, position: 'top' | 'bottom' = 'top') => {
+      addTask: (swimlaneId: string, title: string, position: 'top' | 'bottom' = 'top', priority: Priority = 'none') => {
         const task: Task = {
           id: uuidv4(),
           title,
           completed: false,
-          priority: 'none',
+          priority,
           subtasks: [],
         };
 
@@ -1425,12 +1425,12 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
-      addSubtask: (taskId: string, title: string) => {
+      addSubtask: (taskId: string, title: string, priority: Priority = 'none') => {
         const subtask: Subtask = {
           id: uuidv4(),
           title,
           completed: false,
-          priority: 'none',
+          priority,
         };
 
         set((state) => {
