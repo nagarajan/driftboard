@@ -8,7 +8,7 @@ import type { Priority, Swimlane as SwimlaneType, Task as TaskType } from '../ty
 import { EditableTitle } from './EditableTitle';
 import { Task } from './Task';
 import { SwimlaneMenu } from './SwimlaneMenu';
-import { PrioritySelect } from './PrioritySelect';
+import { PriorityDropdown } from './PriorityDropdown';
 import { useBoardStore } from '../store/boardStore';
 import { isTaskSnoozed } from '../utils/taskSnooze';
 
@@ -32,27 +32,21 @@ function AddTaskWidget({
 }) {
   return (
     <div className="space-y-2">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onAdd(true);
-          if (e.key === 'Escape') onClose();
-        }}
-        placeholder="Task title..."
-        className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
-        autoFocus
-      />
-      <div
-        className="flex items-center justify-between rounded px-2 py-1"
-        style={{ backgroundColor: 'var(--bg-hover)' }}
-      >
-        <span className="text-[0.8em]" style={{ color: 'var(--text-secondary)' }}>
-          Priority
-        </span>
-        <PrioritySelect value={priority} onChange={onPriorityChange} />
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onAdd(true);
+            if (e.key === 'Escape') onClose();
+          }}
+          placeholder="Task title..."
+          className="flex-1 min-w-0 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+          autoFocus
+        />
+        <PriorityDropdown value={priority} onChange={onPriorityChange} />
       </div>
       <div className="flex gap-2">
         <button

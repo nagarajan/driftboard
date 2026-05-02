@@ -5,7 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Priority, Task as TaskType } from '../types';
 import { EditableTitle } from './EditableTitle';
 import { ItemActionsMenu, type ItemMenuAction } from './ItemActionsMenu';
-import { PrioritySelect } from './PrioritySelect';
+import { PriorityDropdown } from './PriorityDropdown';
 import { Subtask } from './Subtask';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SnoozeDialog } from './SnoozeDialog';
@@ -565,7 +565,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
               )}
 
               {isAddingSubtask && (
-                <div style={{ marginLeft: '0.375rem', display: 'flex', flexDirection: 'column', gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
+                <div style={{ marginLeft: '0.375rem', display: 'flex', alignItems: 'center', gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
                   <input
                     type="text"
                     value={newSubtaskTitle}
@@ -576,42 +576,32 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
                     }}
                     placeholder="Subtask title..."
                     className="rounded border px-2 py-1 text-[0.9em] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', minWidth: 0 }}
+                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', flex: '1 1 0', minWidth: 0 }}
                     autoFocus
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-sm, 0.5rem)', minWidth: 0 }}>
-                    <div
-                      className="flex items-center justify-between rounded px-2 py-1"
-                      style={{ backgroundColor: 'var(--bg-hover)', flex: '1 1 0', minWidth: 0, gap: 'var(--gap-sm, 0.5rem)' }}
-                    >
-                      <span className="text-[0.8em]" style={{ color: 'var(--text-secondary)' }}>
-                        Priority
-                      </span>
-                      <PrioritySelect value={newSubtaskPriority} onChange={setNewSubtaskPriority} />
-                    </div>
-                    <button
-                      onClick={() => handleAddSubtask(false)}
-                      className="flex-shrink-0 rounded p-0.5 transition-all duration-150 hover:bg-[var(--bg-hover)] hover:opacity-70 active:scale-90 active:opacity-50"
-                      style={{ color: 'var(--accent-primary)' }}
-                      title="Add subtask"
-                      aria-label="Add subtask"
-                    >
-                      <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={closeAddSubtask}
-                      className="flex-shrink-0 rounded p-0.5 transition-all duration-150 hover:bg-[var(--bg-hover)] hover:opacity-70 active:scale-90 active:opacity-50"
-                      style={{ color: 'var(--text-muted)' }}
-                      title="Cancel"
-                      aria-label="Cancel"
-                    >
-                      <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                  <PriorityDropdown value={newSubtaskPriority} onChange={setNewSubtaskPriority} />
+                  <button
+                    onClick={() => handleAddSubtask(false)}
+                    className="flex-shrink-0 rounded p-0.5 transition-all duration-150 hover:bg-[var(--bg-hover)] hover:opacity-70 active:scale-90 active:opacity-50"
+                    style={{ color: 'var(--accent-primary)' }}
+                    title="Add subtask"
+                    aria-label="Add subtask"
+                  >
+                    <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={closeAddSubtask}
+                    className="flex-shrink-0 rounded p-0.5 transition-all duration-150 hover:bg-[var(--bg-hover)] hover:opacity-70 active:scale-90 active:opacity-50"
+                    style={{ color: 'var(--text-muted)' }}
+                    title="Cancel"
+                    aria-label="Cancel"
+                  >
+                    <svg style={{ width: '1em', height: '1em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
               )}
             </div>
