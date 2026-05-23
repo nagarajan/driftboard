@@ -85,7 +85,10 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState<Priority>('none');
 
-  const openAddTask = (position: 'top' | 'bottom') => setAddTaskPosition(position);
+  const openAddTask = (position: 'top' | 'bottom') => {
+    setAddTaskPosition(position);
+    setNewTaskPriority(position === 'top' ? 'high' : 'none');
+  };
   const closeAddTask = () => { setAddTaskPosition(null); setNewTaskTitle(''); setNewTaskPriority('none'); };
   const firstSnoozedTaskIndex = tasks.findIndex((task) => isTaskSnoozed(task));
 
