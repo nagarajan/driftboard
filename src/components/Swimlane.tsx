@@ -125,7 +125,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
     if (newTaskTitle.trim()) {
       addTask(swimlane.id, newTaskTitle.trim(), addTaskPosition ?? 'bottom', newTaskPriority);
       setNewTaskTitle('');
-      setNewTaskPriority('none');
+      setNewTaskPriority(addTaskPosition === 'top' ? 'high' : 'none');
       if (!keepOpen) {
         closeAddTask();
       }
