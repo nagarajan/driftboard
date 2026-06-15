@@ -137,8 +137,9 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
   return (
     <div
       ref={setSortableRef}
-      style={{ ...style, backgroundColor: 'var(--bg-swimlane)' }}
+      style={{ ...style, backgroundColor: 'var(--bg-swimlane)', scrollSnapAlign: 'start' }}
       className="flex-shrink-0 swimlane-width rounded-lg flex flex-col h-fit"
+      data-snap-target
     >
       {/* Header */}
       <div className="flex items-center" style={{ padding: 'var(--padding-section, 0.75rem)', gap: 'var(--gap-sm, 0.5rem)', borderBottom: '1px solid var(--border-default)' }}>

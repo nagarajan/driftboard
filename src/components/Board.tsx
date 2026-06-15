@@ -78,6 +78,7 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
   const taskDragStartSwimlaneId = useRef<string | null>(null);
   const isShiftDownRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const isSnapScrollingRef = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -476,7 +477,46 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
     }
 
     event.preventDefault();
-    container.scrollLeft += primaryDelta;
+
+    if (isSnapScrollingRef.current) return;
+
+    const swimlaneEls = container.querySelectorAll<HTMLElement>('[data-snap-target]');
+    if (swimlaneEls.length === 0) {
+      container.scrollLeft += primaryDelta;
+      return;
+    }
+
+    const containerPaddingLeft = parseFloat(getComputedStyle(container).paddingLeft) || 0;
+    const direction = primaryDelta > 0 ? 1 : -1;
+    const currentLeft = container.scrollLeft;
+
+    const snapPositions: number[] = [];
+    for (const el of swimlaneEls) {
+      const pos = el.offsetLeft - containerPaddingLeft;
+      snapPositions.push(pos);
+    }
+
+    let targetPos = currentLeft;
+    if (direction > 0) {
+      const next = snapPositions.find((pos) => pos > currentLeft + 1);
+      if (next !== undefined) targetPos = next;
+      else targetPos = container.scrollWidth - container.clientWidth;
+    } else {
+      const prev = [...snapPositions].reverse().find((pos) => pos < currentLeft - 1);
+      if (prev !== undefined) targetPos = prev;
+      else targetPos = 0;
+    }
+
+    if (targetPos === currentLeft) return;
+
+    isSnapScrollingRef.current = true;
+    container.style.scrollSnapType = 'none';
+    container.scrollTo({ left: targetPos, behavior: 'smooth' });
+
+    setTimeout(() => {
+      container.style.scrollSnapType = 'x mandatory';
+      isSnapScrollingRef.current = false;
+    }, 350);
   }, []);
 
   const getActiveTask = (): TaskType | null => {
@@ -510,6 +550,7 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
         ref={scrollContainerRef}
         onWheelCapture={handleBoardWheel}
         className={`flex-1 overflow-x-auto ${containerPaddingClasses[fontSize]}`}
+        style={{ scrollSnapType: 'x mandatory' }}
       >
         <div className={`flex h-full ${swimlaneGapClasses[fontSize]}`}>
           <SortableContext
@@ -540,7 +581,8 @@ export function Board({ board, searchQuery = '' }: BoardProps) {
           <button
             onClick={() => addSwimlane(board.id, 'New Swimlane')}
             className="flex-shrink-0 swimlane-width h-fit border-2 border-dashed rounded-lg p-6 flex items-center justify-center gap-2 transition-all duration-150 hover:opacity-80 hover:shadow-md hover:border-solid active:scale-[0.98] active:opacity-60 active:shadow-none"
-            style={{ backgroundColor: 'var(--bg-swimlane)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}
+            style={{ backgroundColor: 'var(--bg-swimlane)', borderColor: 'var(--border-default)', color: 'var(--text-secondary)', scrollSnapAlign: 'start' }}
+            data-snap-target
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
