@@ -19,7 +19,7 @@ export function ToastContainer() {
     >
       {items.map((t, index) => {
         const age = items.length - 1 - index;
-        const opacity = Math.max(0, 0.5 ** age);
+        const opacity = 0.8 * Math.max(0, 0.5 ** age);
 
         return (
           <div
