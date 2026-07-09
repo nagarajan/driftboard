@@ -21,6 +21,8 @@ import { ReadyTasksPopup } from './components/ReadyTasksPopup';
 import { NotificationFailureDialog } from './components/NotificationFailureDialog';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { getAwaitingAckCount } from './utils/taskSnooze';
+import { triggerBackupNow, isBackupDue } from './utils/driveBackup';
+import { showToast } from './store/toastStore';
 import {
   isNotificationFailureSuppressed,
   suppressNotificationFailureWarning,
@@ -86,6 +88,8 @@ function App() {
   const [notificationsEnabled, setNotificationsEnabledState] = useState(getNotificationsEnabled);
   const [clearDataConfirmOpen, setClearDataConfirmOpen] = useState(false);
   const [driveBackupsOpen, setDriveBackupsOpen] = useState(false);
+  const [backupDue, setBackupDue] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const appStyle: CSSProperties = {
@@ -95,6 +99,41 @@ function App() {
   useEffect(() => {
     document.title = activeBoard ? `DriftBoard - ${activeBoard.name}` : 'DriftBoard';
   }, [activeBoard?.name]);
+
+  // Show the top-bar "Backup now" prompt when the signed-in user hasn't backed
+  // up in the last 4 hours. Re-check on mount and on every board data change.
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) {
+      setBackupDue(false);
+      return;
+    }
+    const recheck = () => setBackupDue(isBackupDue(uid));
+    recheck();
+    const unsubscribe = useBoardStore.subscribe(recheck);
+    return unsubscribe;
+  }, [user?.uid]);
+
+  const handleTopBarBackup = async () => {
+    if (!user?.uid || !user?.email || backingUp) return;
+    setBackingUp(true);
+    try {
+      await triggerBackupNow(
+        user.uid,
+        user.email,
+        useBoardStore.getState().getExportData,
+      );
+      showToast('Backup created', 'add');
+      setBackupDue(false);
+    } catch (e) {
+      showToast(
+        'Backup failed: ' + (e instanceof Error ? e.message : 'Unknown error'),
+        'delete',
+      );
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   // Clear search when switching boards
   useEffect(() => {
@@ -212,6 +251,36 @@ function App() {
                 title={`${totalAckCount} task${totalAckCount === 1 ? '' : 's'} ready to acknowledge across all boards - click to review`}
               >
                 {totalAckCount}
+              </button>
+            )}
+            {backupDue && user && (
+              <button
+                onClick={handleTopBarBackup}
+                disabled={backingUp}
+                className="flex items-center gap-1.5 rounded-md transition-opacity hover:opacity-80 disabled:opacity-60"
+                style={{
+                  padding: '0.3em 0.7em',
+                  fontSize: '0.8em',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--accent-primary)',
+                  color: '#ffffff',
+                }}
+                title="You haven't backed up in a while - click to back up to Google Drive now"
+              >
+                <svg
+                  style={{ width: '1.1em', height: '1.1em' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                {backingUp ? 'Backing up...' : 'Backup now'}
               </button>
             )}
           </div>

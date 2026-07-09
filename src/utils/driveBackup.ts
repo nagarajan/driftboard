@@ -1,4 +1,4 @@
-import { getDriveAccessToken, hasDriveToken } from './driveAuth';
+import { getDriveAccessToken } from './driveAuth';
 import type { ExportData } from '../store/boardStore';
 
 // --- Types ---
@@ -23,6 +23,9 @@ const BACKUP_PREFIX = 'driftboard-backup-';
 const ONE_HOUR = 60 * 60 * 1000;
 const LAST_BACKUP_KEY = 'driftboard-last-backup-';
 
+// How long a backup stays "fresh" before the top-bar "Backup now" prompt reappears.
+export const BACKUP_DUE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+
 const DAILY_SLOTS = 7;
 const WEEKLY_SLOTS = 4;
 const MONTHLY_SLOTS = 12;
@@ -33,12 +36,20 @@ const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 
 // --- Timestamp tracking ---
 
-function getLastBackupTimestamp(uid: string): number {
+export function getLastBackupTimestamp(uid: string): number {
   try {
     return parseInt(localStorage.getItem(LAST_BACKUP_KEY + uid) ?? '0', 10) || 0;
   } catch {
     return 0;
   }
+}
+
+/**
+ * True when no backup has run within BACKUP_DUE_INTERVAL_MS (4 hours). Used to
+ * decide whether to surface the "Backup now" button in the top bar.
+ */
+export function isBackupDue(uid: string): boolean {
+  return Date.now() - getLastBackupTimestamp(uid) >= BACKUP_DUE_INTERVAL_MS;
 }
 
 function setLastBackupTimestamp(uid: string, ts: number): void {
@@ -287,30 +298,46 @@ export async function downloadBackupData(
   return JSON.parse(content) as ExportData;
 }
 
+// In-memory re-entrancy guard: the store subscriber can fire many times in
+// quick succession, so we ensure only one automatic backup runs per user at a
+// time. (Replaces the old approach of advancing the throttle timestamp up front,
+// which caused failed token refreshes to suppress backups for a full hour.)
+const backupInFlight = new Set<string>();
+
 /**
  * Checks whether a Drive backup is due (>1 hour since last) and performs one
- * if so. Only uses cached tokens -- never triggers interactive consent.
- * Called from the Firestore store subscriber on each data change.
+ * if so. Uses a non-interactive token request: it will use a cached token or
+ * silently refresh via GIS when a Google session is available, but never
+ * triggers an interactive consent popup. Called from the store subscriber on
+ * each data change.
  */
 export async function maybeTriggerBackup(
   uid: string,
   email: string,
   getExportData: () => ExportData,
 ): Promise<void> {
-  if (!hasDriveToken(uid)) return;
-
   const last = getLastBackupTimestamp(uid);
   if (Date.now() - last < ONE_HOUR) return;
 
-  setLastBackupTimestamp(uid, Date.now());
-
-  const token = await getDriveAccessToken(uid, email, false);
-  if (!token) return;
+  if (backupInFlight.has(uid)) return;
+  backupInFlight.add(uid);
 
   try {
+    // Attempt a silent (non-interactive) token acquisition. This uses a cached
+    // token if still valid, or silently refreshes via GIS. Returns null (never
+    // prompts) when no Google session is available.
+    const token = await getDriveAccessToken(uid, email, false);
+    if (!token) return;
+
+    // Only advance the throttle once we actually have a token, so a transient
+    // refresh failure doesn't suppress backups for a full hour.
+    setLastBackupTimestamp(uid, Date.now());
+
     await performBackup(token, getExportData());
     console.log('Drive backup completed automatically');
   } catch (err) {
     console.error('Automatic Drive backup failed:', err);
+  } finally {
+    backupInFlight.delete(uid);
   }
 }
