@@ -17,6 +17,8 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  /** UTC ms when the task was last marked complete (drives auto-clear of the Done swimlane). */
+  completedAt?: number;
   priority: Priority;
   note?: string;
   subtasks: Subtask[];

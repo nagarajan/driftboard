@@ -17,6 +17,7 @@ import {
   sortTaskIdsByPriority,
 } from '../utils/priority';
 import { formatSnoozeUntil, isTaskAwaitingAck } from '../utils/taskSnooze';
+import { AUTO_CLEAR_DONE_LABEL, planDoneSweep } from '../utils/doneSwimlane';
 import {
   mergeHistory,
   takeSnapshot,
@@ -88,6 +89,8 @@ interface BoardStore extends AppState {
   deleteTask: (taskId: string) => void;
   clearSwimlane: (swimlaneId: string) => void;
   clearCompletedTasks: (swimlaneId: string) => void;
+  /** Deletes completed tasks that have outlived the Done-swimlane retention window. Returns how many were removed. */
+  autoClearExpiredDoneTasks: (now?: number) => number;
   toggleTaskComplete: (taskId: string) => void;
   snoozeTask: (taskId: string, until: number) => void;
   cancelTaskSnooze: (taskId: string) => void;
@@ -185,6 +188,12 @@ const withoutTaskNote = (task: Task): Task => {
 const withoutTaskSnooze = (task: Task): Task => {
   const nextTask = { ...task };
   delete nextTask.snooze;
+  return nextTask;
+};
+
+const withoutTaskCompletedAt = (task: Task): Task => {
+  const nextTask = { ...task };
+  delete nextTask.completedAt;
   return nextTask;
 };
 
@@ -1072,6 +1081,52 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
+      autoClearExpiredDoneTasks: (now: number = Date.now()) => {
+        let removedCount = 0;
+        // No history entry: this clear is not undoable, and recording it would push the
+        // user's own recent edits off the capped undo stack.
+        set((state) => {
+          const { expiredTaskIds, unstampedTaskIds } = planDoneSweep(
+            state.swimlanes,
+            state.tasks,
+            now
+          );
+          if (expiredTaskIds.length === 0 && unstampedTaskIds.length === 0) return state;
+
+          const nextTasks = { ...state.tasks };
+          expiredTaskIds.forEach((id) => { delete nextTasks[id]; });
+          unstampedTaskIds.forEach((id) => {
+            const task = nextTasks[id];
+            if (task) nextTasks[id] = { ...task, completedAt: now };
+          });
+
+          if (expiredTaskIds.length === 0) {
+            return { tasks: nextTasks };
+          }
+
+          removedCount = expiredTaskIds.length;
+          const expired = new Set(expiredTaskIds);
+          const nextSwimlanes = { ...state.swimlanes };
+          for (const swimlane of Object.values(state.swimlanes)) {
+            if (!swimlane.taskIds.some((id) => expired.has(id))) continue;
+            nextSwimlanes[swimlane.id] = {
+              ...swimlane,
+              taskIds: swimlane.taskIds.filter((id) => !expired.has(id)),
+            };
+          }
+
+          return { tasks: nextTasks, swimlanes: nextSwimlanes };
+        });
+
+        if (removedCount > 0) {
+          showToast(
+            `Auto-cleared ${removedCount} task${removedCount === 1 ? '' : 's'} completed over ${AUTO_CLEAR_DONE_LABEL} ago`,
+            'delete'
+          );
+        }
+        return removedCount;
+      },
+
       toggleTaskComplete: (taskId: string) => {
         let nowComplete = false;
         let taskTitle = '';
@@ -1087,10 +1142,9 @@ export const useBoardStore = create<BoardStore>()(
           return {
             tasks: {
               ...state.tasks,
-              [taskId]: {
-                ...t,
-                completed: !t.completed,
-              },
+              [taskId]: nowComplete
+                ? { ...t, completed: true, completedAt: Date.now() }
+                : withoutTaskCompletedAt({ ...t, completed: false }),
             },
             ...h,
           };

@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
+import { tryOpenInChrome } from '../utils/chromeLauncher';
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
@@ -129,7 +130,14 @@ export function EditableTitle({
                 target="_blank"
                 rel="noreferrer"
                 onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Hold any modifier to bypass Chrome and stay in this browser.
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  if (tryOpenInChrome(props.href)) {
+                    e.preventDefault();
+                  }
+                }}
               />
             ),
             input: ({ node: _node, ...props }) => (

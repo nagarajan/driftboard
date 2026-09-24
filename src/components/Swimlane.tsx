@@ -11,6 +11,7 @@ import { SwimlaneMenu } from './SwimlaneMenu';
 import { PriorityDropdown } from './PriorityDropdown';
 import { useBoardStore } from '../store/boardStore';
 import { isTaskSnoozed } from '../utils/taskSnooze';
+import { AUTO_CLEAR_DONE_LABEL, isDoneSwimlaneTitle } from '../utils/doneSwimlane';
 
 // A no-op sorting strategy: other items never move out of the way
 const noDisplacementStrategy: SortingStrategy = () => null;
@@ -164,6 +165,17 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
         <span className="px-2 py-0.5 rounded-full text-[0.85em]" style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-hover)' }}>
           {tasks.length}
         </span>
+
+        {isDoneSwimlaneTitle(swimlane.title) && (
+          <span
+            style={{ color: 'var(--text-muted)', display: 'flex' }}
+            title={`Completed tasks are deleted automatically ${AUTO_CLEAR_DONE_LABEL} after they are completed`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </span>
+        )}
 
         <button
           onClick={() => openAddTask('top')}

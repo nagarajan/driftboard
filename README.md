@@ -14,6 +14,8 @@ A modern, drag-and-drop kanban board application built with React, TypeScript, a
   - Drag and drop between swimlanes
   - Mark as complete (turns green)
   - Delete with confirmation (if task has subtasks)
+  - Auto-clear: completed tasks in a swimlane named "Done" are permanently deleted
+    1 week after completion (not undoable)
 - **Subtasks**: Create nested subtasks under tasks
   - Inline editable titles
   - Mark as complete (turns green)
@@ -163,6 +165,8 @@ src/
     boardStore.ts       - Zustand store with Firestore sync
   types/
     index.ts            - TypeScript interfaces
+  utils/
+    doneSwimlane.ts     - Done swimlane lookup + auto-clear retention rules
   App.tsx               - Root component
   main.tsx              - Entry point
   index.css             - Tailwind imports

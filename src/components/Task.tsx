@@ -17,6 +17,7 @@ import {
   isTaskSnoozed,
   SNOOZE_PRESETS,
 } from '../utils/taskSnooze';
+import { findDoneSwimlaneIdForSwimlane } from '../utils/doneSwimlane';
 
 interface TaskProps {
   task: TaskType;
@@ -65,20 +66,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
     };
   }, []);
 
-  const findDoneSwimlaneId = (): string | null => {
-    // Find the board this task's swimlane belongs to
-    const boardEntry = Object.values(boards).find((b) =>
-      b.swimlaneIds.includes(swimlaneId)
-    );
-    if (!boardEntry) return null;
-    // Find a swimlane named "done" (case-insensitive) in that board
-    for (const slId of boardEntry.swimlaneIds) {
-      const sl = swimlanes[slId];
-      if (sl && sl.title.trim().toLowerCase() === 'done') return slId;
-    }
-    return null;
-  };
-
   const handleToggleComplete = () => {
     if (task.completed) {
       // Already complete: if timer running, cancel it and revert
@@ -101,7 +88,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
     completeTimerRef.current = setTimeout(() => {
       completeTimerRef.current = null;
       setPendingComplete(false);
-      const doneSwimlaneId = findDoneSwimlaneId();
+      const doneSwimlaneId = findDoneSwimlaneIdForSwimlane(swimlaneId, boards, swimlanes);
       if (doneSwimlaneId && doneSwimlaneId !== swimlaneId) {
         // Move to top of the dedicated Done swimlane
         moveTask(task.id, swimlaneId, doneSwimlaneId, 0);

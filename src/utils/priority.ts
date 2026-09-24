@@ -46,12 +46,18 @@ export function normalizeSubtask(subtask: Subtask): Subtask {
 
 export function normalizeTask(task: Task): Task {
   const normalizedSnooze = normalizeTaskSnooze(task.snooze);
-  return {
+  const hasCompletedAt =
+    task.completed && typeof task.completedAt === 'number' && Number.isFinite(task.completedAt);
+  const normalized: Task = {
     ...task,
     priority: normalizePriority(task.priority),
     subtasks: task.subtasks.map(normalizeSubtask),
     ...(normalizedSnooze ? { snooze: normalizedSnooze } : {}),
   };
+  if (!hasCompletedAt) {
+    delete normalized.completedAt;
+  }
+  return normalized;
 }
 
 export function normalizeTasksRecord(tasks: Record<string, Task>): Record<string, Task> {

@@ -21,6 +21,7 @@ import { ReadyTasksPopup } from './components/ReadyTasksPopup';
 import { NotificationFailureDialog } from './components/NotificationFailureDialog';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { getAwaitingAckCount } from './utils/taskSnooze';
+import { AUTO_CLEAR_SWEEP_INTERVAL_MS } from './utils/doneSwimlane';
 import { triggerBackupNow, isBackupDue } from './utils/driveBackup';
 import { showToast } from './store/toastStore';
 import {
@@ -69,7 +70,7 @@ const themeClasses: Record<string, string> = {
 const getThemeClass = (theme: string) => themeClasses[theme] || 'theme-ocean';
 
 function App() {
-  const { boards, activeBoardId, activateDueSnoozedTasks, swimlanes, tasks } = useBoardStore();
+  const { boards, activeBoardId, activateDueSnoozedTasks, autoClearExpiredDoneTasks, swimlanes, tasks } = useBoardStore();
   const { initialized, user } = useAuthStore();
   const { fontSize, swimlaneWidth } = useUIStore();
   const activeBoard = activeBoardId ? boards[activeBoardId] : null;
@@ -170,6 +171,16 @@ function App() {
     const intervalId = window.setInterval(checkAndNotify, 10000);
     return () => window.clearInterval(intervalId);
   }, [activateDueSnoozedTasks]);
+
+  // Delete tasks that have been sitting completed in a Done swimlane for over a week
+  useEffect(() => {
+    autoClearExpiredDoneTasks();
+    const intervalId = window.setInterval(
+      () => autoClearExpiredDoneTasks(),
+      AUTO_CLEAR_SWEEP_INTERVAL_MS
+    );
+    return () => window.clearInterval(intervalId);
+  }, [autoClearExpiredDoneTasks]);
 
   async function handleClearAllData() {
     setClearDataConfirmOpen(false);
