@@ -47,15 +47,40 @@ export function getTomorrowMorningNine(baseMs: number = Date.now()): number {
   return nextMorning.getTime();
 }
 
-export function getNextWorkingDayMorningNine(baseMs: number = Date.now()): number {
+function isWeekend(date: Date): boolean {
+  // 0 = Sunday, 6 = Saturday
+  return date.getDay() === 0 || date.getDay() === 6;
+}
+
+export function getNextWorkingDayAtHour(hour: number, baseMs: number = Date.now()): number {
   const next = new Date(baseMs);
   next.setDate(next.getDate() + 1);
-  next.setHours(9, 0, 0, 0);
-  // 0 = Sunday, 6 = Saturday
-  while (next.getDay() === 0 || next.getDay() === 6) {
+  next.setHours(hour, 0, 0, 0);
+  while (isWeekend(next)) {
     next.setDate(next.getDate() + 1);
   }
   return next.getTime();
+}
+
+/** The soonest working-day occurrence of `hour`, which may still be today. */
+export function getNextWorkingTimeAtHour(hour: number, baseMs: number = Date.now()): number {
+  const next = new Date(baseMs);
+  next.setHours(hour, 0, 0, 0);
+  if (next.getTime() <= baseMs) {
+    next.setDate(next.getDate() + 1);
+  }
+  while (isWeekend(next)) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.getTime();
+}
+
+export function getNextWorkingDayMorningNine(baseMs: number = Date.now()): number {
+  return getNextWorkingDayAtHour(9, baseMs);
+}
+
+export function getNextWorkingAfternoonFour(baseMs: number = Date.now()): number {
+  return getNextWorkingTimeAtHour(16, baseMs);
 }
 
 export function formatSnoozeUntil(until: number, now: number = Date.now()): string {
@@ -128,4 +153,5 @@ export const SNOOZE_PRESETS: SnoozePreset[] = [
   { label: '4 hours', getUntil: () => addHours(Date.now(), 4) },
   { label: 'Tomorrow 9am', getUntil: () => getTomorrowMorningNine() },
   { label: 'Next working day 9am', getUntil: () => getNextWorkingDayMorningNine() },
+  { label: 'Next working 4pm', getUntil: () => getNextWorkingAfternoonFour() },
 ];
