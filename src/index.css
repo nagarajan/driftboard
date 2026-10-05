@@ -735,39 +735,62 @@ body {
   user-select: none;
 }
 
-@keyframes task-ready-glow {
+/* The glow shadows live on a pseudo-element and only opacity is animated.
+   Animating box-shadow itself repaints the card plus everything its ~50px blur
+   halo overlaps on every frame; opacity runs on the compositor against a
+   shadow that was rasterized once. */
+@keyframes glow-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+    opacity: 0;
   }
   50% {
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--accent-primary) 90%, transparent),
-      0 0 10px 3px color-mix(in srgb, var(--accent-primary) 75%, transparent),
-      0 0 22px 6px color-mix(in srgb, var(--accent-primary) 55%, transparent),
-      0 0 40px 10px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+    opacity: 1;
   }
 }
 
-.task-ready-glow {
-  animation: task-ready-glow 1.6s ease-in-out infinite;
-}
-
-@keyframes badge-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-  }
-  50% {
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--accent-primary) 90%, transparent),
-      0 0 8px 3px color-mix(in srgb, var(--accent-primary) 70%, transparent),
-      0 0 18px 6px color-mix(in srgb, var(--accent-primary) 40%, transparent);
-  }
-}
-
+.task-ready-glow,
 .badge-glow {
-  animation: badge-glow 1.6s ease-in-out infinite;
+  position: relative;
+}
+
+.task-ready-glow::after,
+.badge-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+  animation: glow-pulse 1.6s ease-in-out infinite;
+}
+
+/* Offset out to the card's border box (3px while awaiting acknowledgement) so
+   the glow starts where it did when the shadow was on the card itself. */
+.task-ready-glow::after {
+  inset: -3px;
+  border-radius: calc(0.5rem + 3px);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent-primary) 90%, transparent),
+    0 0 10px 3px color-mix(in srgb, var(--accent-primary) 75%, transparent),
+    0 0 22px 6px color-mix(in srgb, var(--accent-primary) 55%, transparent),
+    0 0 40px 10px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+}
+
+.badge-glow::after {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent-primary) 90%, transparent),
+    0 0 8px 3px color-mix(in srgb, var(--accent-primary) 70%, transparent),
+    0 0 18px 6px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-ready-glow::after,
+  .badge-glow::after {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 @keyframes task-complete-progress {
