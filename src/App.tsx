@@ -8,6 +8,7 @@ import { useBoardRouting } from './hooks/useBoardRouting';
 import { useCmdScrollFontSize } from './hooks/useCmdScrollFontSize';
 import { useCmdShiftScrollSwimlaneWidth } from './hooks/useCmdShiftScrollSwimlaneWidth';
 import { useUndoRedoKeyboard } from './hooks/useUndoRedoKeyboard';
+import { useGlowPulseSchedule } from './hooks/useGlowPulseSchedule';
 import { Board } from './components/Board';
 import { BoardSwitcher } from './components/BoardSwitcher';
 import { FontSizeSelector } from './components/FontSizeSelector';
@@ -158,6 +159,7 @@ function App() {
   useCmdShiftScrollSwimlaneWidth();
 
   useUndoRedoKeyboard();
+  useGlowPulseSchedule();
 
   useEffect(() => {
     const checkAndNotify = () => {

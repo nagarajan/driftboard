@@ -357,7 +357,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
               {awaitingAck && (
                 <button
                   onClick={() => acknowledgeTask(task.id)}
-                  className="badge-glow flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
+                  className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
                   style={{
                     width: '1.75em',
                     height: '1.75em',

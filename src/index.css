@@ -742,10 +742,10 @@ body {
 @keyframes glow-pulse {
   0%,
   100% {
-    opacity: 0;
+    opacity: 1;
   }
   50% {
-    opacity: 1;
+    opacity: 0;
   }
 }
 
@@ -754,6 +754,11 @@ body {
   position: relative;
 }
 
+/* The glow rests at full strength and does not animate. useGlowPulseSchedule
+   adds .glow-burst to the root for five seconds on every wall-clock five
+   minute boundary, and that burst is the only time anything moves: Firefox
+   recomposites only when an animated value changes, so a held opacity costs
+   nothing for the remaining 295 seconds. */
 .task-ready-glow::after,
 .badge-glow::after {
   content: '';
@@ -761,9 +766,14 @@ body {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  opacity: 0;
+  opacity: 1;
+}
+
+/* Three 1.6s breaths, which fits inside the five second burst window. */
+.glow-burst .task-ready-glow::after,
+.glow-burst .badge-glow::after {
   will-change: opacity;
-  animation: glow-pulse 1.6s ease-in-out infinite;
+  animation: glow-pulse 1.6s ease-in-out 3;
 }
 
 /* Offset out to the card's border box (3px while awaiting acknowledgement) so
@@ -786,10 +796,9 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .task-ready-glow::after,
-  .badge-glow::after {
+  .glow-burst .task-ready-glow::after,
+  .glow-burst .badge-glow::after {
     animation: none;
-    opacity: 1;
   }
 }
 
