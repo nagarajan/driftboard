@@ -244,7 +244,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
                   task.completed ? 'var(--border-completed)' : 'var(--border-card)'
                 ),
           borderStyle: 'solid',
-          borderWidth: (isOver && isShiftDragging) || (isOver && isSubtaskDragging) ? '3px' : task.priority !== 'none' || awaitingAck ? '3px' : task.completed ? '2px' : '1px',
+          borderWidth: (isOver && isShiftDragging) || (isOver && isSubtaskDragging) ? '3px' : awaitingAck ? '3px' : task.priority !== 'none' ? '2px' : task.completed ? '2px' : '1px',
           outline: (isOver && isShiftDragging) || (isOver && isSubtaskDragging) ? '2px solid var(--accent-primary)' : 'none',
           outlineOffset: '2px',
           opacity: snoozed ? 0.45 : isSearchActive && !taskMatches ? 0.3 : 1,

@@ -251,7 +251,7 @@ function SortableSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subta
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'
         ),
         borderStyle: 'solid',
-        borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
+        borderWidth: hasPriority ? '2px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
         transition: 'opacity 0.15s, filter 0.15s',
       }}
@@ -311,7 +311,7 @@ function StaticSubtask({ subtask, taskId, searchQuery = '' }: { subtask: Subtask
           subtask.completed ? 'var(--border-completed)' : 'var(--border-card)'
         ),
         borderStyle: 'solid',
-        borderWidth: hasPriority ? '3px' : subtask.completed ? '2px' : '1px',
+        borderWidth: hasPriority ? '2px' : subtask.completed ? '2px' : '1px',
         marginLeft: '0.375rem',
         opacity: isSearchActive && !matches ? 0.3 : 1,
         filter: isSearchActive && !matches ? 'grayscale(0.85)' : 'none',
