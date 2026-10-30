@@ -40,10 +40,10 @@ export function addHours(baseMs: number, hours: number): number {
   return baseMs + hours * HOUR_MS;
 }
 
-export function getTomorrowMorningNine(baseMs: number = Date.now()): number {
+export function getTomorrowAtHour(hour: number, baseMs: number = Date.now()): number {
   const nextMorning = new Date(baseMs);
   nextMorning.setDate(nextMorning.getDate() + 1);
-  nextMorning.setHours(9, 0, 0, 0);
+  nextMorning.setHours(hour, 0, 0, 0);
   return nextMorning.getTime();
 }
 
@@ -62,25 +62,13 @@ export function getNextWorkingDayAtHour(hour: number, baseMs: number = Date.now(
   return next.getTime();
 }
 
-/** The soonest working-day occurrence of `hour`, which may still be today. */
-export function getNextWorkingTimeAtHour(hour: number, baseMs: number = Date.now()): number {
+/** Always at least one day ahead; on a Monday this returns the following Monday. */
+export function getNextMondayAtHour(hour: number, baseMs: number = Date.now()): number {
   const next = new Date(baseMs);
+  const daysUntilMonday = ((8 - next.getDay()) % 7) || 7;
+  next.setDate(next.getDate() + daysUntilMonday);
   next.setHours(hour, 0, 0, 0);
-  if (next.getTime() <= baseMs) {
-    next.setDate(next.getDate() + 1);
-  }
-  while (isWeekend(next)) {
-    next.setDate(next.getDate() + 1);
-  }
   return next.getTime();
-}
-
-export function getNextWorkingDayMorningNine(baseMs: number = Date.now()): number {
-  return getNextWorkingDayAtHour(9, baseMs);
-}
-
-export function getNextWorkingAfternoonFour(baseMs: number = Date.now()): number {
-  return getNextWorkingTimeAtHour(16, baseMs);
 }
 
 export function formatSnoozeUntil(until: number, now: number = Date.now()): string {
@@ -146,12 +134,11 @@ export interface SnoozePreset {
 }
 
 export const SNOOZE_PRESETS: SnoozePreset[] = [
-  { label: '5 seconds', getUntil: () => Date.now() + 5_000 },
+  { label: '2 seconds', getUntil: () => Date.now() + 2_000 },
   { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
-  { label: '30 minutes', getUntil: () => addMinutes(Date.now(), 30) },
   { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },
   { label: '4 hours', getUntil: () => addHours(Date.now(), 4) },
-  { label: 'Tomorrow 9am', getUntil: () => getTomorrowMorningNine() },
-  { label: 'Next working day 9am', getUntil: () => getNextWorkingDayMorningNine() },
-  { label: 'Next working 4pm', getUntil: () => getNextWorkingAfternoonFour() },
+  { label: 'Tomorrow morning', getUntil: () => getTomorrowAtHour(6) },
+  { label: 'Next working day', getUntil: () => getNextWorkingDayAtHour(6) },
+  { label: 'Next Monday', getUntil: () => getNextMondayAtHour(6) },
 ];
