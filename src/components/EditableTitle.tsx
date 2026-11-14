@@ -1,4 +1,4 @@
-import type { KeyboardEvent, CSSProperties } from 'react';
+import type { KeyboardEvent, ClipboardEvent, CSSProperties } from 'react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,6 +11,23 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   }
 
   return Boolean(target.closest('a, button, input, textarea, select, option, [role="button"]'));
+}
+
+function parsePastedUrl(text: string): string | null {
+  const trimmed = text.trim();
+  if (!/^https?:\/\/\S+$/i.test(trimmed)) {
+    return null;
+  }
+  try {
+    new URL(trimmed);
+  } catch {
+    return null;
+  }
+  return trimmed.replace(/\(/g, '%28').replace(/\)/g, '%29');
+}
+
+function toMarkdownLink(label: string, url: string): string {
+  return `[${label.replace(/([[\]])/g, '\\$1')}](${url})`;
 }
 
 interface EditableTitleProps {
@@ -99,6 +116,26 @@ export function EditableTitle({
     }
   };
 
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (renderMode !== 'markdown') return;
+
+    const el = e.currentTarget;
+    const { selectionStart, selectionEnd } = el;
+    const selected = el.value.slice(selectionStart, selectionEnd);
+    if (!selected.trim() || parsePastedUrl(selected)) return;
+
+    const url = parsePastedUrl(e.clipboardData.getData('text/plain'));
+    if (!url) return;
+
+    e.preventDefault();
+    const link = toMarkdownLink(selected, url);
+    // execCommand keeps the edit on the native undo stack; setRangeText is the fallback.
+    if (!document.execCommand('insertText', false, link)) {
+      el.setRangeText(link, selectionStart, selectionEnd, 'end');
+      setEditValue(el.value);
+    }
+  };
+
   const textControlStyle: CSSProperties = {
     borderColor: 'var(--accent-primary)',
     backgroundColor: 'var(--bg-input)',
@@ -169,6 +206,7 @@ export function EditableTitle({
         }}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         onClick={(e) => e.stopPropagation()}
         placeholder={placeholder}
         rows={1}
