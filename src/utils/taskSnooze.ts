@@ -40,26 +40,11 @@ export function addHours(baseMs: number, hours: number): number {
   return baseMs + hours * HOUR_MS;
 }
 
-export function getTomorrowAtHour(hour: number, baseMs: number = Date.now()): number {
-  const nextMorning = new Date(baseMs);
-  nextMorning.setDate(nextMorning.getDate() + 1);
-  nextMorning.setHours(hour, 0, 0, 0);
-  return nextMorning.getTime();
-}
-
-function isWeekend(date: Date): boolean {
-  // 0 = Sunday, 6 = Saturday
-  return date.getDay() === 0 || date.getDay() === 6;
-}
-
-export function getNextWorkingDayAtHour(hour: number, baseMs: number = Date.now()): number {
-  const next = new Date(baseMs);
-  next.setDate(next.getDate() + 1);
-  next.setHours(hour, 0, 0, 0);
-  while (isWeekend(next)) {
-    next.setDate(next.getDate() + 1);
-  }
-  return next.getTime();
+export function getDaysFromNowAtHour(days: number, hour: number, baseMs: number = Date.now()): number {
+  const target = new Date(baseMs);
+  target.setDate(target.getDate() + days);
+  target.setHours(hour, 0, 0, 0);
+  return target.getTime();
 }
 
 /** Always at least one day ahead; on a Monday this returns the following Monday. */
@@ -133,12 +118,44 @@ export interface SnoozePreset {
   getUntil: () => number;
 }
 
-export const SNOOZE_PRESETS: SnoozePreset[] = [
+export interface SnoozeCategory {
+  label: string;
+  presets: SnoozePreset[];
+}
+
+export type SnoozeMenuEntry = SnoozePreset | SnoozeCategory;
+
+export function isSnoozeCategory(entry: SnoozeMenuEntry): entry is SnoozeCategory {
+  return 'presets' in entry;
+}
+
+const SNOOZE_DAY_HOUR = 6;
+
+const minutesPreset = (minutes: number): SnoozePreset => ({
+  label: `${minutes} minutes`,
+  getUntil: () => addMinutes(Date.now(), minutes),
+});
+
+const hoursPreset = (hours: number): SnoozePreset => ({
+  label: hours === 1 ? '1 hour' : `${hours} hours`,
+  getUntil: () => addHours(Date.now(), hours),
+});
+
+const daysPreset = (days: number): SnoozePreset => ({
+  label: `${days} days`,
+  getUntil: () => getDaysFromNowAtHour(days, SNOOZE_DAY_HOUR),
+});
+
+export const SNOOZE_MENU: SnoozeMenuEntry[] = [
   { label: '2 seconds', getUntil: () => Date.now() + 2_000 },
-  { label: '10 minutes', getUntil: () => addMinutes(Date.now(), 10) },
-  { label: '1 hour', getUntil: () => addHours(Date.now(), 1) },
-  { label: '4 hours', getUntil: () => addHours(Date.now(), 4) },
-  { label: 'Tomorrow morning', getUntil: () => getTomorrowAtHour(6) },
-  { label: 'Next working day', getUntil: () => getNextWorkingDayAtHour(6) },
-  { label: 'Next Monday', getUntil: () => getNextMondayAtHour(6) },
+  { label: 'Minutes', presets: [10, 20, 30].map(minutesPreset) },
+  { label: 'Hours', presets: [1, 2, 4, 6, 8].map(hoursPreset) },
+  {
+    label: 'Days',
+    presets: [
+      { label: 'Tomorrow morning', getUntil: () => getDaysFromNowAtHour(1, SNOOZE_DAY_HOUR) },
+      { label: 'Next Monday', getUntil: () => getNextMondayAtHour(SNOOZE_DAY_HOUR) },
+      ...[2, 3, 4].map(daysPreset),
+    ],
+  },
 ];

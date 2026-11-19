@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { FontSize, SwimlaneWidth } from '../types';
+import { SWIMLANE_WIDTH_ORDER } from '../constants/swimlaneWidth';
 import { showToast } from './toastStore';
 
 const FONT_SIZE_LABELS: Record<FontSize, string> = {
@@ -53,11 +54,38 @@ export const useUIStore = create<UIStore>()(
     }),
     {
       name: 'taskboard-ui-settings',
-      storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({
-        fontSize: state.fontSize,
-        swimlaneWidth: state.swimlaneWidth,
-      }),
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state): UISettings => pickUISettings(state),
     }
   )
 );
+
+export interface UISettings {
+  fontSize: FontSize;
+  swimlaneWidth: SwimlaneWidth;
+}
+
+export function pickUISettings(state: UISettings): UISettings {
+  return { fontSize: state.fontSize, swimlaneWidth: state.swimlaneWidth };
+}
+
+export function uiSettingsEqual(a: UISettings, b: UISettings): boolean {
+  return a.fontSize === b.fontSize && a.swimlaneWidth === b.swimlaneWidth;
+}
+
+/** Applies synced settings without toasts; ignores missing or unrecognised values. */
+export function applyRemoteUISettings(raw: unknown): void {
+  if (!raw || typeof raw !== 'object') return;
+  const { fontSize, swimlaneWidth } = raw as Record<string, unknown>;
+  const next: Partial<UISettings> = {};
+  if (typeof fontSize === 'string' && fontSize in FONT_SIZE_LABELS) {
+    next.fontSize = fontSize as FontSize;
+  }
+  if (SWIMLANE_WIDTH_ORDER.includes(swimlaneWidth as SwimlaneWidth)) {
+    next.swimlaneWidth = swimlaneWidth as SwimlaneWidth;
+  }
+  const current = pickUISettings(useUIStore.getState());
+  if (!uiSettingsEqual(current, { ...current, ...next })) {
+    useUIStore.setState(next);
+  }
+}

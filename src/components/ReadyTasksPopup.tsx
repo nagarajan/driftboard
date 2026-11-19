@@ -1,8 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useBoardStore } from '../store/boardStore';
-import { isTaskAwaitingAck, SNOOZE_PRESETS } from '../utils/taskSnooze';
+import { isSnoozeCategory, isTaskAwaitingAck, SNOOZE_MENU } from '../utils/taskSnooze';
 import { SnoozeDialog } from './SnoozeDialog';
 import type { Task, Board } from '../types/index';
+
+function SnoozeOption({ label, indent = false, onClick }: { label: string; indent?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-left transition-colors hover:bg-[var(--bg-hover)]"
+      style={{
+        padding: indent ? '0.4rem 0.75rem 0.4rem 1.75rem' : '0.4rem 0.75rem',
+        fontSize: '0.88em',
+        color: 'var(--text-primary)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 interface ReadyTask {
   task: Task;
@@ -17,6 +33,8 @@ export function ReadyTasksPopup({ onClose }: ReadyTasksPopupProps) {
   const { boards, swimlanes, tasks, acknowledgeTask, snoozeTask } = useBoardStore();
   const overlayRef = useRef<HTMLDivElement>(null);
   const [snoozeMenuTaskId, setSnoozeMenuTaskId] = useState<string | null>(null);
+  const [openSnoozeCategory, setOpenSnoozeCategory] = useState<string | null>(null);
+  const [snoozeMenuAnchor, setSnoozeMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const [customSnoozeTaskId, setCustomSnoozeTaskId] = useState<string | null>(null);
   const snoozeMenuRef = useRef<HTMLDivElement>(null);
 
@@ -144,7 +162,11 @@ export function ReadyTasksPopup({ onClose }: ReadyTasksPopupProps) {
           </div>
 
           {/* Task list */}
-          <div className="flex-1 overflow-y-auto" style={{ padding: '0.5rem' }}>
+          <div
+            className="flex-1 overflow-y-auto"
+            style={{ padding: '0.5rem' }}
+            onScroll={() => setSnoozeMenuTaskId(null)}
+          >
             {readyTasks.length === 0 ? (
               <div
                 className="flex items-center justify-center"
@@ -186,7 +208,12 @@ export function ReadyTasksPopup({ onClose }: ReadyTasksPopupProps) {
                       {/* Snooze button + dropdown */}
                       <div className="relative flex-shrink-0" ref={isSnoozeOpen ? snoozeMenuRef : undefined}>
                         <button
-                          onClick={() => setSnoozeMenuTaskId(isSnoozeOpen ? null : task.id)}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setSnoozeMenuAnchor({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                            setSnoozeMenuTaskId(isSnoozeOpen ? null : task.id);
+                            setOpenSnoozeCategory(null);
+                          }}
                           className="flex items-center justify-center rounded flex-shrink-0 transition-colors hover:bg-[var(--bg-hover)]"
                           style={{
                             width: '2em',
@@ -201,11 +228,14 @@ export function ReadyTasksPopup({ onClose }: ReadyTasksPopupProps) {
                           </svg>
                         </button>
 
-                        {isSnoozeOpen && (
+                        {isSnoozeOpen && snoozeMenuAnchor && (
+                          // Fixed so the scrolling task list does not clip it.
                           <div
-                            className="absolute right-0 z-10 rounded-lg shadow-lg flex flex-col"
+                            className="fixed z-10 rounded-lg shadow-lg flex flex-col overflow-y-auto"
                             style={{
-                              top: 'calc(100% + 4px)',
+                              top: snoozeMenuAnchor.top,
+                              right: snoozeMenuAnchor.right,
+                              maxHeight: `calc(100vh - ${snoozeMenuAnchor.top}px - 8px)`,
                               backgroundColor: 'var(--bg-card)',
                               border: '1px solid var(--border-default)',
                               minWidth: '13rem',
@@ -223,20 +253,51 @@ export function ReadyTasksPopup({ onClose }: ReadyTasksPopupProps) {
                             >
                               Snooze for
                             </p>
-                            {SNOOZE_PRESETS.map((preset) => (
-                              <button
-                                key={preset.label}
-                                onClick={() => handleSnooze(task.id, preset.getUntil())}
-                                className="text-left transition-colors hover:bg-[var(--bg-hover)]"
-                                style={{
-                                  padding: '0.4rem 0.75rem',
-                                  fontSize: '0.88em',
-                                  color: 'var(--text-primary)',
-                                }}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
+                            {SNOOZE_MENU.map((entry) => {
+                              if (!isSnoozeCategory(entry)) {
+                                return (
+                                  <SnoozeOption
+                                    key={entry.label}
+                                    label={entry.label}
+                                    onClick={() => handleSnooze(task.id, entry.getUntil())}
+                                  />
+                                );
+                              }
+                              const isCategoryOpen = openSnoozeCategory === entry.label;
+                              return (
+                                <div key={entry.label} className="flex flex-col">
+                                  <button
+                                    onClick={() => setOpenSnoozeCategory(isCategoryOpen ? null : entry.label)}
+                                    className="flex items-center justify-between text-left transition-colors hover:bg-[var(--bg-hover)]"
+                                    style={{
+                                      padding: '0.4rem 0.75rem',
+                                      fontSize: '0.88em',
+                                      color: 'var(--text-primary)',
+                                    }}
+                                    aria-expanded={isCategoryOpen}
+                                  >
+                                    {entry.label}
+                                    <svg style={{ width: '0.9em', height: '0.9em' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d={isCategoryOpen ? 'M19 14l-7-7-7 7' : 'M9 5l7 7-7 7'}
+                                      />
+                                    </svg>
+                                  </button>
+                                  {isCategoryOpen &&
+                                    entry.presets.map((preset) => (
+                                      <SnoozeOption
+                                        key={preset.label}
+                                        label={preset.label}
+                                        indent
+                                        onClick={() => handleSnooze(task.id, preset.getUntil())}
+                                      />
+                                    ))}
+                                </div>
+                              );
+                            })}
                             <div style={{ borderTop: '1px solid var(--border-default)', margin: '0.25rem 0' }} />
                             <button
                               onClick={() => {

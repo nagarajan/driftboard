@@ -15,7 +15,9 @@ import {
   formatSnoozeUntil,
   isTaskAwaitingAck,
   isTaskSnoozed,
-  SNOOZE_PRESETS,
+  isSnoozeCategory,
+  SNOOZE_MENU,
+  type SnoozePreset,
 } from '../utils/taskSnooze';
 import { findDoneSwimlaneIdForSwimlane } from '../utils/doneSwimlane';
 
@@ -143,6 +145,13 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
       ? `Snoozed until ${formatSnoozeUntil(task.snooze.until)}`
       : '';
 
+  const toSnoozeAction = (preset: SnoozePreset): ItemMenuAction => ({
+    label: preset.label,
+    onSelect: () => snoozeTask(task.id, preset.getUntil()),
+    highlighted: snoozed,
+    tone: 'warning',
+  });
+
   const menuActions: ItemMenuAction[] = [
     ...(!hasNote && !isNoteVisible
       ? [{ label: 'Add note', onSelect: () => setIsNoteVisible(true) }]
@@ -152,12 +161,11 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
       highlighted: snoozed || awaitingAck,
       tone: awaitingAck ? 'success' as const : 'warning' as const,
       children: [
-        ...SNOOZE_PRESETS.map((preset) => ({
-          label: preset.label,
-          onSelect: () => snoozeTask(task.id, preset.getUntil()),
-          highlighted: snoozed,
-          tone: 'warning' as const,
-        })),
+        ...SNOOZE_MENU.map((entry) =>
+          isSnoozeCategory(entry)
+            ? { label: entry.label, highlighted: snoozed, tone: 'warning' as const, children: entry.presets.map(toSnoozeAction) }
+            : toSnoozeAction(entry)
+        ),
         {
           label: 'Custom...',
           onSelect: () => setShowSnoozeDialog(true),

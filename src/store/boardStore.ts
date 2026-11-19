@@ -7,6 +7,7 @@ import { maybeTriggerBackup } from '../utils/driveBackup';
 import type { AppState, Board, Swimlane, Task, Subtask, FontSize, Theme, Priority, Workspace } from '../types';
 import { DEFAULT_BOARD_THEME } from '../types';
 import { sanitizeEmail } from './authStore';
+import { useUIStore, pickUISettings, uiSettingsEqual, applyRemoteUISettings } from './uiStore';
 import { getFirstBoardId, getOrderedBoardIds, getOrderedBoardIdsForWorkspace, getOrderedWorkspaceIds, reorderIds } from '../utils/boardOrder';
 import {
   PRIORITY_LABELS,
@@ -226,8 +227,19 @@ const firestorePayload = (state: AppState) => ({
   boardOrderIds: stripUndefinedFields(state.boardOrderIds),
   workspaces: stripUndefinedFields(state.workspaces),
   workspaceOrderIds: stripUndefinedFields(state.workspaceOrderIds),
+  uiSettings: pickUISettings(useUIStore.getState()),
   updatedAt: Date.now(),
 });
+
+const saveUISettingsToFirestore = () => {
+  if (!firestoreDoc) {
+    return;
+  }
+  setDoc(firestoreDoc, { uiSettings: pickUISettings(useUIStore.getState()) }, { merge: true })
+    .catch((error) => {
+      console.error('Failed to save UI settings to Firestore:', error);
+    });
+};
 
 const getComparableSyncData = (state: {
   boards: Record<string, Board>;
@@ -1143,7 +1155,7 @@ export const useBoardStore = create<BoardStore>()(
             tasks: {
               ...state.tasks,
               [taskId]: nowComplete
-                ? { ...t, completed: true, completedAt: Date.now() }
+                ? { ...withoutTaskSnooze(t), completed: true, completedAt: Date.now() }
                 : withoutTaskCompletedAt({ ...t, completed: false }),
             },
             ...h,
@@ -2111,6 +2123,8 @@ export const useBoardStore = create<BoardStore>()(
 // Subscribe to state changes and sync to Firestore
 let unsubscribeFromStore: (() => void) | null = null;
 let unsubscribeFromFirestore: (() => void) | null = null;
+let unsubscribeFromUISettings: (() => void) | null = null;
+let applyingRemoteUISettings = false;
 
 // Track previous state to detect task data changes
 let prevTaskData: {
@@ -2131,6 +2145,10 @@ function stopFirestoreSync() {
   if (unsubscribeFromFirestore) {
     unsubscribeFromFirestore();
     unsubscribeFromFirestore = null;
+  }
+  if (unsubscribeFromUISettings) {
+    unsubscribeFromUISettings();
+    unsubscribeFromUISettings = null;
   }
   if (pendingSaveTimeout) {
     clearTimeout(pendingSaveTimeout);
@@ -2207,6 +2225,15 @@ function startFirestoreSync() {
     console.log('Subscribed to local state changes');
   }
 
+  if (!unsubscribeFromUISettings) {
+    unsubscribeFromUISettings = useUIStore.subscribe((state, prevState) => {
+      if (applyingRemoteUISettings || uiSettingsEqual(state, prevState)) {
+        return;
+      }
+      saveUISettingsToFirestore();
+    });
+  }
+
   // Subscribe to Firestore changes and update local state
   if (!unsubscribeFromFirestore) {
     unsubscribeFromFirestore = onSnapshot(
@@ -2214,6 +2241,22 @@ function startFirestoreSync() {
       (snapshot) => {
         const blocked = shouldBlockFirestoreUpdates();
         console.log('Firestore snapshot received, exists:', snapshot.exists(), 'blocked:', blocked);
+
+        // Settings are applied even while board updates are blocked: snapshots
+        // already include pending local writes, so they cannot be stale.
+        if (snapshot.exists()) {
+          const remoteUISettings = snapshot.data().uiSettings;
+          if (remoteUISettings) {
+            applyingRemoteUISettings = true;
+            try {
+              applyRemoteUISettings(remoteUISettings);
+            } finally {
+              applyingRemoteUISettings = false;
+            }
+          } else {
+            saveUISettingsToFirestore();
+          }
+        }
         
         // Ignore ALL Firestore updates while we have pending local changes
         // This prevents the race condition where old data overwrites local changes

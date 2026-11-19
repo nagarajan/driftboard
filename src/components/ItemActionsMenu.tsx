@@ -16,13 +16,78 @@ interface ItemActionsMenuProps {
   actions?: ItemMenuAction[];
 }
 
+const getActionColor = (action: ItemMenuAction) =>
+  action.tone === 'success'
+    ? 'var(--accent-success)'
+    : action.tone === 'warning'
+      ? 'var(--accent-primary)'
+      : action.highlighted
+        ? 'var(--accent-primary)'
+        : 'var(--text-primary)';
+
+function ActionList({ actions, onClose }: { actions: ItemMenuAction[]; onClose: () => void }) {
+  const [openSubmenuLabel, setOpenSubmenuLabel] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-1">
+      {actions.map((action) => {
+        const hasChildren = Boolean(action.children && action.children.length > 0);
+        const isSubmenuOpen = openSubmenuLabel === action.label;
+
+        return (
+          <div key={action.label}>
+            <button
+              type="button"
+              onClick={() => {
+                if (hasChildren) {
+                  setOpenSubmenuLabel(isSubmenuOpen ? null : action.label);
+                  return;
+                }
+                action.onSelect?.();
+                onClose();
+              }}
+              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.85em] transition-colors hover:bg-[var(--bg-hover)]"
+              style={{ color: getActionColor(action) }}
+            >
+              <span>{action.label}</span>
+              {hasChildren && (
+                <svg
+                  style={{ width: '0.9em', height: '0.9em' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d={isSubmenuOpen ? 'M19 14l-7-7-7 7' : 'M9 5l7 7-7 7'}
+                  />
+                </svg>
+              )}
+            </button>
+
+            {hasChildren && isSubmenuOpen && (
+              <div
+                className="ml-2 mt-1 rounded-md border-l pl-2"
+                style={{ borderColor: 'var(--border-default)' }}
+              >
+                <ActionList actions={action.children!} onClose={onClose} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ItemActionsMenu({
   priority,
   onPriorityChange,
   actions = [],
 }: ItemActionsMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [openSubmenuLabel, setOpenSubmenuLabel] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,7 +98,6 @@ export function ItemActionsMenu({
     const handlePointerDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
         setIsOpen(false);
-        setOpenSubmenuLabel(null);
       }
     };
 
@@ -43,14 +107,7 @@ export function ItemActionsMenu({
     };
   }, [isOpen]);
 
-  const getActionColor = (action: ItemMenuAction) =>
-    action.tone === 'success'
-      ? 'var(--accent-success)'
-      : action.tone === 'warning'
-        ? 'var(--accent-primary)'
-        : action.highlighted
-          ? 'var(--accent-primary)'
-          : 'var(--text-primary)';
+  const closeMenu = () => setIsOpen(false);
 
   return (
     <div
@@ -61,15 +118,7 @@ export function ItemActionsMenu({
     >
       <button
         type="button"
-        onClick={() =>
-          setIsOpen((open) => {
-            const nextOpen = !open;
-            if (!nextOpen) {
-              setOpenSubmenuLabel(null);
-            }
-            return nextOpen;
-          })
-        }
+        onClick={() => setIsOpen((open) => !open)}
         className="flex items-center justify-center rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
         style={{
           color: isOpen ? 'var(--text-primary)' : 'var(--text-muted)',
@@ -102,74 +151,7 @@ export function ItemActionsMenu({
             borderColor: 'var(--border-default)',
           }}
         >
-          {actions.length > 0 && (
-            <div className="space-y-1">
-              {actions.map((action) => {
-                const color = getActionColor(action);
-                const hasChildren = Boolean(action.children && action.children.length > 0);
-                const isSubmenuOpen = openSubmenuLabel === action.label;
-
-                return (
-                  <div key={action.label}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (hasChildren) {
-                          setOpenSubmenuLabel(isSubmenuOpen ? null : action.label);
-                          return;
-                        }
-                        action.onSelect?.();
-                        setIsOpen(false);
-                        setOpenSubmenuLabel(null);
-                      }}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[0.85em] transition-colors hover:bg-[var(--bg-hover)]"
-                      style={{ color }}
-                    >
-                      <span>{action.label}</span>
-                      {hasChildren && (
-                        <svg
-                          style={{ width: '0.9em', height: '0.9em' }}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d={isSubmenuOpen ? 'M19 14l-7-7-7 7' : 'M9 5l7 7-7 7'}
-                          />
-                        </svg>
-                      )}
-                    </button>
-
-                    {hasChildren && isSubmenuOpen && (
-                      <div
-                        className="ml-2 mt-1 space-y-1 rounded-md border-l pl-2"
-                        style={{ borderColor: 'var(--border-default)' }}
-                      >
-                        {action.children!.map((childAction) => (
-                          <button
-                            key={`${action.label}-${childAction.label}`}
-                            type="button"
-                            onClick={() => {
-                              childAction.onSelect?.();
-                              setIsOpen(false);
-                              setOpenSubmenuLabel(null);
-                            }}
-                            className="w-full rounded px-2 py-1.5 text-left text-[0.85em] transition-colors hover:bg-[var(--bg-hover)]"
-                            style={{ color: getActionColor(childAction) }}
-                          >
-                            {childAction.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {actions.length > 0 && <ActionList actions={actions} onClose={closeMenu} />}
 
           <div
             className="flex items-center justify-between gap-3 rounded px-2 py-1.5"
@@ -182,8 +164,7 @@ export function ItemActionsMenu({
               value={priority}
               onChange={(nextPriority) => {
                 onPriorityChange(nextPriority);
-                setIsOpen(false);
-                setOpenSubmenuLabel(null);
+                closeMenu();
               }}
             />
           </div>
