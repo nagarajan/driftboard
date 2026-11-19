@@ -88,7 +88,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
 
   const openAddTask = (position: 'top' | 'bottom') => {
     setAddTaskPosition(position);
-    setNewTaskPriority(position === 'top' ? 'high' : 'none');
+    setNewTaskPriority('none');
   };
   const closeAddTask = () => { setAddTaskPosition(null); setNewTaskTitle(''); setNewTaskPriority('none'); };
   const firstSnoozedTaskIndex = tasks.findIndex((task) => isTaskSnoozed(task));
@@ -126,7 +126,7 @@ export function Swimlane({ swimlane, tasks, boardId, isTaskDragging = false, isS
     if (newTaskTitle.trim()) {
       addTask(swimlane.id, newTaskTitle.trim(), addTaskPosition ?? 'bottom', newTaskPriority);
       setNewTaskTitle('');
-      setNewTaskPriority(addTaskPosition === 'top' ? 'high' : 'none');
+      setNewTaskPriority('none');
       if (!keepOpen) {
         closeAddTask();
       }
