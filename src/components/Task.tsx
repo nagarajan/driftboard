@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -9,7 +9,7 @@ import { PriorityDropdown } from './PriorityDropdown';
 import { Subtask } from './Subtask';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SnoozeDialog } from './SnoozeDialog';
-import { useBoardStore } from '../store/boardStore';
+import { useBoardStore, TASK_COMPLETE_MOVE_DELAY_MS } from '../store/boardStore';
 import { getPriorityBorderColor, sortSubtasksByPriority } from '../utils/priority';
 import {
   formatSnoozeUntil,
@@ -19,8 +19,6 @@ import {
   SNOOZE_MENU,
   type SnoozePreset,
 } from '../utils/taskSnooze';
-import { findDoneSwimlaneIdForSwimlane } from '../utils/doneSwimlane';
-
 interface TaskProps {
   task: TaskType;
   swimlaneId: string;
@@ -29,8 +27,6 @@ interface TaskProps {
   isSubtaskDragging?: boolean;
   searchQuery?: string;
 }
-
-const DONE_MOVE_DELAY_MS = 1500;
 
 export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging = false, isSubtaskDragging = false, searchQuery = '' }: TaskProps) {
   const {
@@ -44,9 +40,6 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
     snoozeTask,
     cancelTaskSnooze,
     acknowledgeTask,
-    moveTask,
-    boards,
-    swimlanes,
   } = useBoardStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSnoozeDialog, setShowSnoozeDialog] = useState(false);
@@ -55,50 +48,15 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<Priority>('none');
   const [isNoteVisible, setIsNoteVisible] = useState(false);
   const [isSubtasksExpanded, setIsSubtasksExpanded] = useState(false);
-  // pendingComplete: true while the 3-second countdown is running after checking the box
+  // pendingComplete: true while the progress bar runs after checking the box
   const [pendingComplete, setPendingComplete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const completeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const collapseRef = useRef<HTMLDivElement>(null);
 
-  // Cancel the pending timer when the task is unmounted
-  useEffect(() => {
-    return () => {
-      if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
-    };
-  }, []);
-
+  // The store moves the task once TASK_COMPLETE_MOVE_DELAY_MS has passed; this only drives the progress bar.
   const handleToggleComplete = () => {
-    if (task.completed) {
-      // Already complete: if timer running, cancel it and revert
-      if (completeTimerRef.current) {
-        clearTimeout(completeTimerRef.current);
-        completeTimerRef.current = null;
-        setPendingComplete(false);
-        toggleTaskComplete(task.id); // revert to incomplete
-      } else {
-        // Normally unchecking a completed task (already moved, or done swimlane)
-        toggleTaskComplete(task.id);
-      }
-      return;
-    }
-
-    // Mark complete immediately
+    setPendingComplete(!task.completed);
     toggleTaskComplete(task.id);
-    setPendingComplete(true);
-
-    completeTimerRef.current = setTimeout(() => {
-      completeTimerRef.current = null;
-      setPendingComplete(false);
-      const doneSwimlaneId = findDoneSwimlaneIdForSwimlane(swimlaneId, boards, swimlanes);
-      if (doneSwimlaneId && doneSwimlaneId !== swimlaneId) {
-        // Move to top of the dedicated Done swimlane
-        moveTask(task.id, swimlaneId, doneSwimlaneId, 0);
-      } else {
-        // No Done swimlane — move to the bottom of the current swimlane
-        moveTask(task.id, swimlaneId, swimlaneId);
-      }
-    }, DONE_MOVE_DELAY_MS);
   };
 
   const {
@@ -260,7 +218,7 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
           transition: 'opacity 0.15s, filter 0.15s',
         }}
       >
-          {/* Progress bar: animates left-to-right over 3s after task is checked complete */}
+          {/* Progress bar: animates left-to-right until the task is moved after being checked complete */}
           {pendingComplete && (
             <div
               aria-hidden="true"
@@ -273,8 +231,10 @@ export function Task({ task, swimlaneId, isTaskDragging = false, isShiftDragging
                 backgroundColor: 'var(--accent-success)',
                 pointerEvents: 'none',
                 zIndex: 10,
+                animationDuration: `${TASK_COMPLETE_MOVE_DELAY_MS}ms`,
               }}
               className="task-complete-progress-bar"
+              onAnimationEnd={() => setPendingComplete(false)}
             />
           )}
           <div

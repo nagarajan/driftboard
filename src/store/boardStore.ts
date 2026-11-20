@@ -18,7 +18,7 @@ import {
   sortTaskIdsByPriority,
 } from '../utils/priority';
 import { formatSnoozeUntil, isTaskAwaitingAck } from '../utils/taskSnooze';
-import { AUTO_CLEAR_DONE_LABEL, planDoneSweep } from '../utils/doneSwimlane';
+import { AUTO_CLEAR_DONE_LABEL, findDoneSwimlaneIdForSwimlane, planDoneSweep } from '../utils/doneSwimlane';
 import {
   mergeHistory,
   takeSnapshot,
@@ -36,6 +36,7 @@ import { showToast } from './toastStore';
 export type { HistoryEntry } from '../utils/boardHistory';
 
 export type HistoryOptions = { skipHistory?: boolean };
+export type MoveTaskOptions = HistoryOptions & { clearSnooze?: boolean };
 
 export interface ExportData {
   /** v5+ includes per-board theme, task/subtask priority, and task snooze state. v6+ includes workspaces. */
@@ -90,6 +91,8 @@ interface BoardStore extends AppState {
   deleteTask: (taskId: string) => void;
   clearSwimlane: (swimlaneId: string) => void;
   clearCompletedTasks: (swimlaneId: string) => void;
+  /** Sets priority to "none" on every task and subtask in the swimlane. */
+  clearSwimlanePriorities: (swimlaneId: string) => void;
   /** Deletes completed tasks that have outlived the Done-swimlane retention window. Returns how many were removed. */
   autoClearExpiredDoneTasks: (now?: number) => number;
   toggleTaskComplete: (taskId: string) => void;
@@ -102,7 +105,7 @@ interface BoardStore extends AppState {
     fromSwimlaneId: string,
     toSwimlaneId: string,
     newIndex?: number,
-    options?: HistoryOptions
+    options?: MoveTaskOptions
   ) => void;
   reorderTasks: (swimlaneId: string, taskIds: string[], options?: HistoryOptions) => void;
 
@@ -162,6 +165,29 @@ const findSwimlaneIdForTask = (
   }
   return null;
 };
+
+/** Delay between ticking a task complete and moving it to the Done swimlane (or the bottom of its own). */
+export const TASK_COMPLETE_MOVE_DELAY_MS = 1500;
+
+// Kept outside components so the move still happens if the task unmounts (board switch, search) mid-delay.
+const pendingCompletionMoves = new Map<string, ReturnType<typeof setTimeout>>();
+
+function finishCompletingTask(taskId: string) {
+  const state = useBoardStore.getState();
+  if (!state.tasks[taskId]?.completed) {
+    return;
+  }
+  const swimlaneId = findSwimlaneIdForTask(state.swimlanes, taskId);
+  if (!swimlaneId) {
+    return;
+  }
+  const doneSwimlaneId = findDoneSwimlaneIdForSwimlane(swimlaneId, state.boards, state.swimlanes);
+  if (doneSwimlaneId && doneSwimlaneId !== swimlaneId) {
+    state.moveTask(taskId, swimlaneId, doneSwimlaneId, 0, { clearSnooze: true });
+  } else {
+    state.moveTask(taskId, swimlaneId, swimlaneId, undefined, { clearSnooze: true });
+  }
+}
 
 const findBoardIdForSwimlane = (
   boards: Record<string, Board>,
@@ -1056,6 +1082,48 @@ export const useBoardStore = create<BoardStore>()(
         }
       },
 
+      clearSwimlanePriorities: (swimlaneId: string) => {
+        let swimlaneTitle = '';
+        let changedCount = 0;
+        set((state) => {
+          const swimlane = state.swimlanes[swimlaneId];
+          if (!swimlane) return state;
+
+          const newTasks = { ...state.tasks };
+          for (const taskId of swimlane.taskIds) {
+            const task = state.tasks[taskId];
+            if (!task) continue;
+            const changedSubtasks = task.subtasks.filter((st) => st.priority !== 'none').length;
+            const taskChanged = task.priority !== 'none';
+            if (!taskChanged && changedSubtasks === 0) continue;
+            changedCount += changedSubtasks + (taskChanged ? 1 : 0);
+            newTasks[taskId] = {
+              ...task,
+              priority: 'none',
+              subtasks: task.subtasks.map((st) => (st.priority === 'none' ? st : { ...st, priority: 'none' })),
+            };
+          }
+          if (changedCount === 0) return state;
+          swimlaneTitle = swimlane.title;
+
+          const h = mergeHistory(state, `Clear priorities in "${swimlane.title}"`);
+          return {
+            tasks: newTasks,
+            swimlanes: {
+              ...state.swimlanes,
+              [swimlaneId]: { ...swimlane, taskIds: sortTaskIdsByPriority(swimlane.taskIds, newTasks) },
+            },
+            ...h,
+          };
+        });
+        if (changedCount > 0) {
+          showToast(
+            `Cleared priority on ${changedCount} item${changedCount === 1 ? '' : 's'} in "${swimlaneTitle}"`,
+            'edit'
+          );
+        }
+      },
+
       clearCompletedTasks: (swimlaneId: string) => {
         let swimlaneTitle = '';
         let removedCount = 0;
@@ -1155,16 +1223,32 @@ export const useBoardStore = create<BoardStore>()(
             tasks: {
               ...state.tasks,
               [taskId]: nowComplete
-                ? { ...withoutTaskSnooze(t), completed: true, completedAt: Date.now() }
+                ? { ...t, completed: true, completedAt: Date.now() }
                 : withoutTaskCompletedAt({ ...t, completed: false }),
             },
             ...h,
           };
         });
-        if (taskTitle) {
-          showToast(
-            nowComplete ? `Task "${taskTitle}" marked complete` : `Task "${taskTitle}" marked incomplete`,
-            'edit'
+        if (!taskTitle) {
+          return;
+        }
+        showToast(
+          nowComplete ? `Task "${taskTitle}" marked complete` : `Task "${taskTitle}" marked incomplete`,
+          'edit'
+        );
+
+        const pending = pendingCompletionMoves.get(taskId);
+        if (pending) {
+          clearTimeout(pending);
+          pendingCompletionMoves.delete(taskId);
+        }
+        if (nowComplete) {
+          pendingCompletionMoves.set(
+            taskId,
+            setTimeout(() => {
+              pendingCompletionMoves.delete(taskId);
+              finishCompletingTask(taskId);
+            }, TASK_COMPLETE_MOVE_DELAY_MS)
           );
         }
       },
@@ -1397,11 +1481,16 @@ export const useBoardStore = create<BoardStore>()(
         fromSwimlaneId: string,
         toSwimlaneId: string,
         newIndex?: number,
-        options?: HistoryOptions
+        options?: MoveTaskOptions
       ) => {
         set((state) => {
           const h = options?.skipHistory ? {} : mergeHistory(state, 'Move task');
           const newSwimlanes = { ...state.swimlanes };
+          const task = state.tasks[taskId];
+          const newTasks =
+            options?.clearSnooze && task?.snooze
+              ? { ...state.tasks, [taskId]: withoutTaskSnooze(task) }
+              : state.tasks;
 
           // Remove from source
           if (newSwimlanes[fromSwimlaneId]) {
@@ -1421,11 +1510,11 @@ export const useBoardStore = create<BoardStore>()(
             }
             newSwimlanes[toSwimlaneId] = {
               ...newSwimlanes[toSwimlaneId],
-              taskIds: sortTaskIdsByPriority(newTaskIds, state.tasks),
+              taskIds: sortTaskIdsByPriority(newTaskIds, newTasks),
             };
           }
 
-          return { swimlanes: newSwimlanes, ...h };
+          return { tasks: newTasks, swimlanes: newSwimlanes, ...h };
         });
       },
 

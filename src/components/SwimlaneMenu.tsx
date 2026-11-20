@@ -15,12 +15,27 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
   const [showClearCompletedConfirm, setShowClearCompletedConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const { boards, boardOrderIds, moveSwimlaneToBoard, deleteSwimlane, addSwimlane, clearSwimlane, clearCompletedTasks, swimlanes, tasks } =
-    useBoardStore();
+  const {
+    boards,
+    boardOrderIds,
+    moveSwimlaneToBoard,
+    deleteSwimlane,
+    addSwimlane,
+    clearSwimlane,
+    clearCompletedTasks,
+    clearSwimlanePriorities,
+    swimlanes,
+    tasks,
+  } = useBoardStore();
 
   const swimlane = swimlanes[swimlaneId];
   const taskCount = swimlane?.taskIds.length ?? 0;
   const completedCount = swimlane?.taskIds.filter((id) => tasks[id]?.completed).length ?? 0;
+  const hasAnyPriority =
+    swimlane?.taskIds.some((id) => {
+      const task = tasks[id];
+      return task && (task.priority !== 'none' || task.subtasks.some((st) => st.priority !== 'none'));
+    }) ?? false;
 
   const otherBoards = getOrderedBoardIds(boards, boardOrderIds)
     .map((id) => boards[id])
@@ -120,6 +135,15 @@ export function SwimlaneMenu({ swimlaneId, currentBoardId }: SwimlaneMenuProps) 
             style={{ color: 'var(--text-primary)' }}
           >
             Duplicate
+          </button>
+
+          <button
+            onClick={() => { clearSwimlanePriorities(swimlaneId); setIsOpen(false); }}
+            disabled={!hasAnyPriority}
+            className="w-full px-4 py-2 text-left text-[0.9em] transition-colors hover:bg-[var(--bg-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Clear all priorities
           </button>
 
           <hr className="my-1" style={{ borderColor: 'var(--border-default)' }} />
